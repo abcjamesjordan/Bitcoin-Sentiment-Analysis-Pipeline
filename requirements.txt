@@ -13,7 +13,7 @@ grpcio-status==1.62.2
 idna==3.7
 newsapi-python==0.2.7
 packaging==24.0
-polars==0.20.23
+polars-lts-cpu=0.20.23
 proto-plus==1.23.0
 protobuf==4.25.3
 pyasn1==0.6.0
