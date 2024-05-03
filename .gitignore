@@ -1,5 +1,29 @@
 # Ignore the google credential json
 config/news-api-421321-3a5c418f3870.json
 
-# Ignore logs
-logs/*
+# Ignore Airflow logs
+logs/
+
+# Ignore Airflow temporary files
+.env
+.bash_history
+.bash_logout
+.bashrc
+
+# Ignore Python virtual environment directory
+venv/
+
+# Ignore user-specific IDE files
+.idea/
+*.iml
+.vscode/
+
+# Ignore local config files
+airflow.cfg
+airflow_local_settings.py
+
+# Ignore compiled Python files
+*.pyc
+
+# Ignore pycache files
+*.pyc
