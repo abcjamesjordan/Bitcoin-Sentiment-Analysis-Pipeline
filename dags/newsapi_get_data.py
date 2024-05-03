@@ -1,8 +1,9 @@
-import logging
+import logging, io
 from datetime import datetime, timedelta
 from airflow.decorators import dag, task
 from airflow.models import Variable
 from newsapi import NewsApiClient
+from google.cloud import bigquery
 
 logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -85,9 +86,40 @@ def newsapi_get_data():
             logging.info(f"Dataframe df type: {type(df)}")
             logging.info(f"{df.head()}")
 
+    @task()
+    def load_data(df):
+        client = bigquery.Client()
+
+        DESTINATION = 'news-api-421321.articles.raw'
+        PROJECT = 'news-api-421321'
+
+        try:
+            # Write DataFrame to stream as parquet file; does not hit disk
+            with io.BytesIO() as stream:
+                # TODO: rewrite this section to use pandas instead of Polars...
+                df.write_parquet(stream)
+                stream.seek(0)
+                job = client.load_table_from_file(
+                    stream,
+                    DESTINATION=DESTINATION,
+                    PROJECT=PROJECT,
+                    job_config=bigquery.LoadJobConfig(
+                        source_format=bigquery.SourceFormat.PARQUET,
+                    ),
+                )
+            job.result()  # Waits for the job to complete
+        except Exception as e:
+            logging.error(f"Failed to upload dataframe: {e}")
+            return False
+        return True
+
+
     all_articles = extract_articles()
     confirm_extract(all_articles)
     df = transform_articles(all_articles)
     confirm_transform(df)
+    if not load_data(df):
+        logging.error("Failed to upload dataframe")
+        exit(1)
 
 dag = newsapi_get_data()
