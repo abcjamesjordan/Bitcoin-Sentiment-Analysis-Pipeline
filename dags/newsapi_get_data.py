@@ -5,10 +5,10 @@ from airflow.models import Variable
 from newsapi import NewsApiClient
 
 logging.basicConfig(
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        level=logging.INFO,
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 
 @dag(start_date=datetime(2021, 12, 1), catchup=False)
 def newsapi_get_data():
@@ -33,9 +33,9 @@ def newsapi_get_data():
             )
             return all_articles
         except Exception as e:
-            logging.error(f"Failed to fetch articles {e}")
+            logging.error(f"Failed to fetch articles: {e}")
             raise e
-    
+
     @task()
     def transform_articles(articles):
         import pandas as pd
@@ -65,7 +65,7 @@ def newsapi_get_data():
         df['uploadedAt'] = df['uploadedAt'].dt.strftime('%Y/%m/%d %H:%M:%S')
 
         return df
-    
+
     @task(trigger_rule="all_done")
     def confirm_extract(articles):
         if articles is None:
@@ -74,7 +74,7 @@ def newsapi_get_data():
         else:
             logging.info(f"Successfully extracted articles")
             logging.info(f"Articles type: {type(articles)}")
-    
+
     @task(trigger_rule="all_done")
     def confirm_transform(df):
         if df is None:
@@ -85,11 +85,9 @@ def newsapi_get_data():
             logging.info(f"Dataframe df type: {type(df)}")
             logging.info(f"{df.head()}")
 
-
     all_articles = extract_articles()
     confirm_extract(all_articles)
     df = transform_articles(all_articles)
     confirm_transform(df)
 
-
-newsapi_get_data()
+dag = newsapi_get_data()
