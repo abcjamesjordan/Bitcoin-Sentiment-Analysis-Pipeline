@@ -1,34 +1,27 @@
 import logging
 from datetime import datetime, timedelta
-
 from airflow.decorators import dag, task
 from airflow.models import Variable
-
-# Configure logging
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+from newsapi import NewsApiClient
 
 logging.basicConfig(
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    level=logging.INFO,
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-
-TODAY = datetime.now()
-YESTERDAY = TODAY + timedelta(days=-1)
-TOPIC = 'bitcoin'
-DESTINATION = 'news-api-421321.articles.raw'
-PROJECT = 'news-api-421321'
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        level=logging.INFO,
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
 
 @dag(start_date=datetime(2021, 12, 1), catchup=False)
 def newsapi_get_data():
-    @task(task_id="extract", retries=2)
+
+    @task(retries=2)
     def extract_articles():
-        from newsapi import NewsApiClient
+        TODAY = datetime.now()
+        YESTERDAY = TODAY + timedelta(days=-1)
+        TOPIC = 'bitcoin'
 
         api_key = Variable.get('NEWS_API_KEY')
         newsapi = NewsApiClient(api_key=api_key)
-        
+
         try:
             all_articles = newsapi.get_everything(
                 q=TOPIC,
@@ -40,23 +33,14 @@ def newsapi_get_data():
             )
             return all_articles
         except Exception as e:
-            logger.error(f"Failed to fetch articles")
-            return None
+            logging.error(f"Failed to fetch articles {e}")
+            raise e
     
-    @task(task_id="confirm")
-    def confirm_extract(articles):
-        if articles is None:
-            logger.error("Failed to extract articles")
-            logger.error(f"articles is None: {type(articles)}")
-            raise Exception("Failed to extract articles")
-        else:
-            logger.info(f"Successfully extracted articles")
-            logger.info(f"Articles type: {type(articles)}")
-        logger.info("End of pipeline..")
-    
-    @task(task_id="transform")
+    @task()
     def transform_articles(articles):
         import pandas as pd
+
+        TODAY = datetime.now()
 
         data = []
 
@@ -82,17 +66,24 @@ def newsapi_get_data():
 
         return df
     
-    @task(task_id="confirm_transform")
+    @task(trigger_rule="all_done")
+    def confirm_extract(articles):
+        if articles is None:
+            logging.error("Failed to extract articles")
+            raise Exception("Failed to extract articles")
+        else:
+            logging.info(f"Successfully extracted articles")
+            logging.info(f"Articles type: {type(articles)}")
+    
+    @task(trigger_rule="all_done")
     def confirm_transform(df):
         if df is None:
-            logger.error("Failed to transform dataframe")
-            logger.error(f"Dataframe df is None: {type(df)}")
+            logging.error("Failed to transform dataframe")
             raise Exception("Failed to transform dataframe")
         else:
-            logger.info(f"Successfully transformed df")
-            logger.info(f"Dataframe df type: {type(df)}")
-            logger.info(f"{df.head()}")
-        logger.info("End of pipeline..")
+            logging.info(f"Successfully transformed df")
+            logging.info(f"Dataframe df type: {type(df)}")
+            logging.info(f"{df.head()}")
 
 
     all_articles = extract_articles()
