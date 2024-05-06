@@ -1,9 +1,9 @@
 import logging, io
 from datetime import datetime, timedelta
+
+# Airflow imports
 from airflow.decorators import dag, task
 from airflow.models import Variable
-from newsapi import NewsApiClient
-from google.cloud import bigquery
 
 logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -12,8 +12,10 @@ logging.basicConfig(
 )
 
 @task()
-def extract_articles():
-    TODAY = datetime.now()
+def extract_articles(logical_date: datetime):
+    from newsapi import NewsApiClient
+
+    TODAY = logical_date
     YESTERDAY = TODAY + timedelta(days=-1)
     TOPIC = 'bitcoin'
 
@@ -29,18 +31,16 @@ def extract_articles():
             sort_by='relevancy',
             page=1
         )
-        confirm_extract(all_articles)
         return all_articles
     except Exception as e:
         logging.error(f"Failed to fetch articles: {e}")
         raise e
 
 @task()
-def transform_articles(articles):
+def transform_articles(articles, logical_date:datetime):
     import pandas as pd
 
-    TODAY = datetime.now()
-
+    TODAY = logical_date
     data = []
 
     for article in articles['articles']:
@@ -59,14 +59,13 @@ def transform_articles(articles):
     # Convert 'publishedAt' to datetime
     df['publishedAt'] = pd.to_datetime(df['publishedAt'], format='%Y-%m-%dT%H:%M:%SZ')
 
-    # Format 'publishedAt' and 'uploadedAt' to desired formats
+    # Format 'publishedAt' and 'uploadedAt' to BigQuery formats
     df['publishedAt'] = df['publishedAt'].dt.strftime('%Y-%m-%d %H:%M:%S')
     df['uploadedAt'] = df['uploadedAt'].dt.strftime('%Y/%m/%d %H:%M:%S')
 
-    confirm_transform(df)
-
     return df
 
+@task(trigger_rule="all_done")
 def confirm_extract(articles):
     if articles is None:
         logging.error("Failed to extract articles")
@@ -75,6 +74,7 @@ def confirm_extract(articles):
         logging.info(f"Successfully extracted articles")
         logging.info(f"Articles type: {type(articles)}")
 
+@task(trigger_rule="all_done")
 def confirm_transform(df):
     if df is None:
         logging.error("Failed to transform dataframe")
@@ -86,6 +86,8 @@ def confirm_transform(df):
 
 @task()
 def load_data(df):
+    from google.cloud import bigquery
+
     client = bigquery.Client()
 
     DESTINATION = 'news-api-421321.articles.raw'
@@ -113,7 +115,8 @@ def load_data(df):
 @dag(schedule='1 13 * * *', start_date=datetime(2021, 12, 1), catchup=False)
 def newsapi_get_data():
     all_articles = extract_articles()
+    confirm_extract(all_articles)
     df = transform_articles(all_articles)
-    # load_data(df)
+    confirm_transform(df) >> load_data(df)
 
 newsapi_get_data()
