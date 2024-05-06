@@ -97,12 +97,12 @@ def newsapi_get_data():
             # Write DataFrame to stream as parquet file; does not hit disk
             with io.BytesIO() as stream:
                 # TODO: rewrite this section to use pandas instead of Polars...
-                df.write_parquet(stream)
+                df.to_parquet(stream)
                 stream.seek(0)
                 job = client.load_table_from_file(
                     stream,
-                    DESTINATION=DESTINATION,
-                    PROJECT=PROJECT,
+                    destination=DESTINATION,
+                    project=PROJECT,
                     job_config=bigquery.LoadJobConfig(
                         source_format=bigquery.SourceFormat.PARQUET,
                     ),
