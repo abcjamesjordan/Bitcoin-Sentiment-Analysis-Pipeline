@@ -1,2 +1,2 @@
-# Stop all docker containers and remove ALL volumes
-docker compose down --volumes --rmi all
+# Stop all docker containers and persist ALL volumes
+docker compose down
