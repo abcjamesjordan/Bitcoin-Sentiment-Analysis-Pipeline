@@ -27,3 +27,6 @@ airflow_local_settings.py
 
 # Ignore pycache files
 *.pyc
+
+# Mac files
+.DS_Store
