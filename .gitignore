@@ -30,3 +30,7 @@ airflow_local_settings.py
 
 # Mac files
 .DS_Store
+
+# pychache
+__pycache__/
+*.pyc
