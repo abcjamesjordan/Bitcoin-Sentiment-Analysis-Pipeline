@@ -1,0 +1,23 @@
+# Also for airflow to start at startup
+# Save to /etc/systemd/system/airflow.service
+# sudo systemctl daemon-reload
+# sudo systemctl enable airflow.service
+# sudo systemctl start airflow.service
+# sudo systemctl status airflow.service
+# sudo systemctl stop airflow.service
+
+[Unit]
+Description=Airflow Service with Docker Compose
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/srv/github/airflow
+ExecStart=/bin/sh -c 'docker compose up airflow-init && sleep 10 && docker compose up --detach'
+ExecStop=/usr/bin/docker compose down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

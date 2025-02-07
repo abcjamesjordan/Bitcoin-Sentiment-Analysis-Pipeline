@@ -5,6 +5,11 @@ from datetime import datetime, timedelta
 from airflow.decorators import dag, task
 from airflow.models import Variable
 
+# API Key retrieval
+from newsapi import NewsApiClient
+api_key = Variable.get('NEWS_API_KEY')
+newsapi = NewsApiClient(api_key=api_key)
+
 logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
     level=logging.INFO,
@@ -13,14 +18,9 @@ logging.basicConfig(
 
 @task()
 def extract_articles(logical_date: datetime):
-    from newsapi import NewsApiClient
-
     TODAY = logical_date
     YESTERDAY = TODAY + timedelta(days=-1)
     TOPIC = 'bitcoin'
-
-    api_key = Variable.get('NEWS_API_KEY')
-    newsapi = NewsApiClient(api_key=api_key)
 
     try:
         all_articles = newsapi.get_everything(
@@ -61,7 +61,7 @@ def transform_articles(articles, logical_date:datetime):
 
     # Format 'publishedAt' and 'uploadedAt' to BigQuery formats
     df['publishedAt'] = df['publishedAt'].dt.strftime('%Y-%m-%d %H:%M:%S')
-    df['uploadedAt'] = df['uploadedAt'].dt.strftime('%Y/%m/%d %H:%M:%S')
+    df['uploadedAt'] = df['uploadedAt'].dt.strftime('%Y-%m-%d %H:%M:%S')
 
     return df
 
@@ -98,7 +98,6 @@ def load_data(df):
     try:
         # Write DataFrame to stream as parquet file; does not hit disk
         with io.BytesIO() as stream:
-            # TODO: rewrite this section to use pandas instead of Polars...
             df.to_parquet(stream)
             stream.seek(0)
             job = client.load_table_from_file(
@@ -114,12 +113,12 @@ def load_data(df):
         raise Exception(f"Failed to upload dataframe: {e}")
     return True
 
-@dag(schedule='1 13 * * *', start_date=datetime(2021, 12, 1), catchup=False)
+@dag(schedule='1 13 * * *', start_date=datetime(2025, 1, 1), catchup=False)
 def newsapi_get_data():
     all_articles = extract_articles()
-    all_articles = confirm_extract(all_articles)
-    df = transform_articles(all_articles)
-    df = confirm_transform(df) 
-    load_data(df)
+    validated_articles = confirm_extract(all_articles)
+    df = transform_articles(validated_articles)
+    validated_df = confirm_transform(df) 
+    load_data(validated_df)
 
 newsapi_get_data()

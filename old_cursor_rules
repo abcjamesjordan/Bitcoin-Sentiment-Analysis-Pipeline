@@ -1,0 +1,53 @@
+# Python and Airflow DAG Cursor Rules
+
+# Imports should be at the top of the file
+[*.py]
+imports_top = true
+
+# Enforce consistent function spacing
+function_spacing = 2
+
+# PEP 8 style guidelines
+max_line_length = 120
+indent_size = 4
+use_spaces = true
+
+# Airflow DAG specific rules
+[**/dags/*.py]
+# Required Airflow imports should be grouped together
+required_imports = [
+    "from airflow import DAG",
+    "from airflow.decorators import dag, task",
+    "from datetime import datetime, timedelta"
+]
+
+# DAG configuration should be clearly separated
+dag_config_spacing = 2
+
+# Task dependencies should be explicit
+explicit_dependencies = true
+
+# Encourage use of task decorators over operators
+prefer_task_decorators = true
+
+# Documentation requirements
+require_dag_doc = true
+require_task_doc = true
+
+# Naming conventions
+dag_name_pattern = "^[a-z][a-z0-9_]*$"
+task_name_pattern = "^[a-z][a-z0-9_]*$"
+
+# Security best practices
+disable_pickle = true
+require_owner = true
+
+
+
+
+
+
+
+
+
+
