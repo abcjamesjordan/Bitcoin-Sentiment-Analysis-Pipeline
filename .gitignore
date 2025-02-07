@@ -34,3 +34,5 @@ airflow_local_settings.py
 # pychache
 __pycache__/
 *.pyc
+
+.cursorrules
