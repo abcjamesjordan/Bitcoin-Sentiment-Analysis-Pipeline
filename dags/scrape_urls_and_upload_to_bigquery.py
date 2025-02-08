@@ -110,7 +110,6 @@ def scrape_urls_and_upload_to_bigquery():
         FROM `{SOURCE}`
         WHERE url NOT IN (SELECT url FROM blacklisted)
         AND url NOT IN (SELECT url FROM processed)
-        AND url LIKE '%{DOMAIN_TO_SCRAPE}%'
         {time_filter_query}
         LIMIT {URL_LIMIT}
         """
