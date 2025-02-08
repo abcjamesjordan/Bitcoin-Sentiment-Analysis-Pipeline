@@ -27,8 +27,9 @@ logging.basicConfig(
 # Constants
 class NewsAPIConfig:
     TOPIC = 'bitcoin'
-    PROJECT = 'news-api-421321'
-    DESTINATION = f'{PROJECT}.articles.raw'
+    PROJECT = Variable.get('GCP_PROJECT_ID')
+    DATASET = Variable.get('ARTICLES_DATASET')
+    DESTINATION = f'{PROJECT}.{DATASET}.raw'
     LOOKBACK_DAYS = 1
     LANGUAGE = 'en'
     SORT_BY = 'publishedAt' # 'relevancy'
