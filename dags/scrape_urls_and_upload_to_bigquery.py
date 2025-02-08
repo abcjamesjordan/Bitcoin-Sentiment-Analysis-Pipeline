@@ -1,24 +1,23 @@
-# Required Airflow imports should be grouped together first
-from airflow import DAG  # Missing required import
+# Airflow imports
+from airflow import DAG
 from airflow.decorators import dag, task
-from datetime import datetime, timedelta
+from airflow.exceptions import AirflowSkipException
+from airflow.models import Variable
 
 # Python standard library imports
+from datetime import datetime, timedelta
 import logging
 from time import sleep
 from urllib.parse import urlparse
 
 # Third-party imports
-import pandas as pd
 from google.cloud import bigquery
+import pandas as pd
 from trafilatura import fetch_url, extract
 
 # Local imports
 from utils.http.requests import fetch_with_requests
 from utils.http.selenium import fetch_with_selenium
-
-# Added from the code block
-from airflow.models import Variable
 
 logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -30,7 +29,7 @@ logging.basicConfig(
 PROJECT_ID = Variable.get("GCP_PROJECT_ID", "news-api-421321")
 ARTICLES_DATASET = Variable.get("ARTICLES_DATASET", "articles")
 URL_LIMIT = Variable.get("URL_BATCH_SIZE", 2)
-DOMAIN_TO_SCRAPE = Variable.get("DOMAIN_TO_SCRAPE", "bitcoinist.com")
+# DOMAIN_TO_SCRAPE = Variable.get("DOMAIN_TO_SCRAPE", "forbes.com")
 default_args = {
     # 'owner': 'airflow',
     # 'depends_on_past': False,
@@ -111,7 +110,6 @@ def scrape_urls_and_upload_to_bigquery():
         FROM `{SOURCE}`
         WHERE url NOT IN (SELECT url FROM blacklisted)
         AND url NOT IN (SELECT url FROM processed)
-        AND url like '%{DOMAIN_TO_SCRAPE}%'
         {time_filter_query}
         LIMIT {URL_LIMIT}
         """
@@ -248,6 +246,10 @@ def scrape_urls_and_upload_to_bigquery():
 
     @task
     def upload_to_bigquery(data: dict):
+        if not data["processed_data"]:
+            logging.warning("No data was found to upload to BigQuery")
+            raise AirflowSkipException("No data was found to upload to BigQuery")
+        
         df = pd.DataFrame(data["processed_data"])
         
         # Convert numeric columns to strings before upload
