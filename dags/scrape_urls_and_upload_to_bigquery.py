@@ -29,7 +29,7 @@ logging.basicConfig(
 PROJECT_ID = Variable.get("GCP_PROJECT_ID", "news-api-421321")
 ARTICLES_DATASET = Variable.get("ARTICLES_DATASET", "articles")
 URL_LIMIT = Variable.get("URL_BATCH_SIZE", 2)
-# DOMAIN_TO_SCRAPE = Variable.get("DOMAIN_TO_SCRAPE", "forbes.com")
+DOMAIN_TO_SCRAPE = Variable.get("DOMAIN_TO_SCRAPE", "newsbtc.com")
 default_args = {
     # 'owner': 'airflow',
     # 'depends_on_past': False,
@@ -110,6 +110,7 @@ def scrape_urls_and_upload_to_bigquery():
         FROM `{SOURCE}`
         WHERE url NOT IN (SELECT url FROM blacklisted)
         AND url NOT IN (SELECT url FROM processed)
+        AND url LIKE '%{DOMAIN_TO_SCRAPE}%'
         {time_filter_query}
         LIMIT {URL_LIMIT}
         """
@@ -125,10 +126,12 @@ def scrape_urls_and_upload_to_bigquery():
         """Process URLs using domain-specific strategies from BigQuery."""
         DEFAULT_STRATEGIES = ['requests', 'trafilatura', 'selenium']
         new_successful_strategies = {}
+        domains_to_remove = set()  # Track failed domain strategies
         processed_data = []
         
         for url in urls:
             domain = urlparse(url).netloc
+            using_domain_strategy = domain in domain_strategies
             strategies = domain_strategies.get(domain, DEFAULT_STRATEGIES)
             if isinstance(strategies, str):
                 strategies = [strategies]
@@ -137,6 +140,7 @@ def scrape_urls_and_upload_to_bigquery():
             MAX_RETRIES = 3
             RETRY_DELAY = 5
             
+            success = False
             for attempt in range(MAX_RETRIES):
                 try:
                     if attempt > 0:
@@ -170,6 +174,7 @@ def scrape_urls_and_upload_to_bigquery():
                                 result = extract(content)
                                 
                                 if result and len(result.strip()) >= 25:
+                                    success = True
                                     logging.info(f"URL: {url} - Strategy '{strategy}' succeeded with valid content")
                                     processed_data.append({
                                         "url": url,
@@ -181,7 +186,7 @@ def scrape_urls_and_upload_to_bigquery():
                                     })
                                     
                                     # Record successful strategy if it's a new domain
-                                    if domain not in domain_strategies:
+                                    if not using_domain_strategy:
                                         new_successful_strategies[domain] = scraping_method
                                     
                                     break  # Success - break out of strategy loop
@@ -201,11 +206,13 @@ def scrape_urls_and_upload_to_bigquery():
                             continue
                     
                     # If we got a successful result, break out of retry loop
-                    if any(item['url'] == url and item['success'] for item in processed_data):
+                    if success:
                         break
                     
-                    # If we get here, all strategies failed for this attempt
-                    logging.warning(f"URL: {url} - All strategies failed: {[f['strategy'] for f in failed_strategies]}")
+                    # If using domain strategy and it failed, mark for removal
+                    if not success and using_domain_strategy:
+                        domains_to_remove.add(domain)
+                        logging.warning(f"Domain strategy failed for {domain}, will remove from domain_strategies")
                     
                 except Exception as e:
                     if attempt == MAX_RETRIES - 1:  # Last attempt
@@ -227,6 +234,11 @@ def scrape_urls_and_upload_to_bigquery():
                             "retry_count": attempt + 1,
                             "scraping_method": failed_strategies[0]['strategy'] if failed_strategies else None
                         })
+                        
+                        # If using domain strategy and all retries failed, mark for removal
+                        if using_domain_strategy:
+                            domains_to_remove.add(domain)
+                            logging.warning(f"Domain strategy failed for {domain} after all retries, will remove from domain_strategies")
         
         logging.info("Processed data results:")
         for item in processed_data:
@@ -241,7 +253,8 @@ def scrape_urls_and_upload_to_bigquery():
         
         return {
             "processed_data": processed_data,
-            "new_strategies": new_successful_strategies
+            "new_strategies": new_successful_strategies,
+            "strategies_to_remove": list(domains_to_remove)
         }
 
     @task
@@ -277,6 +290,30 @@ def scrape_urls_and_upload_to_bigquery():
         except Exception as e:
             raise Exception(f"Failed to upload dataframe: {e}")
 
+    @task
+    def remove_failed_strategies(domains_to_remove: list):
+        """Remove failed strategies from BigQuery domain_strategies table."""
+        if not domains_to_remove:
+            return
+
+        client = bigquery.Client()
+        table_id = f'{PROJECT_ID}.{ARTICLES_DATASET}.domain_strategies'
+        
+        # Delete rows for failed domains
+        query = f"""
+        DELETE FROM `{table_id}`
+        WHERE domain IN UNNEST(@domains)
+        """
+        
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ArrayQueryParameter("domains", "STRING", domains_to_remove),
+            ]
+        )
+        
+        client.query(query, job_config=job_config).result()
+        logging.info(f"Removed failed strategies for domains: {domains_to_remove}")
+
     def is_valid_url(url: str) -> bool:
         try:
             result = urlparse(url)
@@ -288,7 +325,8 @@ def scrape_urls_and_upload_to_bigquery():
     domain_strategies = get_domain_strategies()
     urls = extract_urls()
     results = process_urls(urls, domain_strategies)
+    remove_failed = remove_failed_strategies(results["strategies_to_remove"])
     upload_task = upload_to_bigquery(results)
-    update_domain_strategies(results["new_strategies"]) >> upload_task
+    remove_failed >> update_domain_strategies(results["new_strategies"]) >> upload_task
 
 scrape_urls_and_upload_to_bigquery()
