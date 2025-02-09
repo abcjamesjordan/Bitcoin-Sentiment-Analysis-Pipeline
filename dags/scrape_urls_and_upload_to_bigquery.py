@@ -29,8 +29,7 @@ default_args = {
 @dag(
     default_args=default_args,
     schedule="@daily",
-    catchup=False,
-    depends_on_past=False
+    catchup=False
 )
 def scrape_urls_and_upload_to_bigquery():
     # Wait for newsapi DAG to complete
@@ -40,8 +39,8 @@ def scrape_urls_and_upload_to_bigquery():
         external_task_id=None,  # Wait for entire DAG
         timeout=3600,  # 1 hour timeout
         mode='reschedule',  # Don't block a worker while waiting
-        allowed_states=['success'],
-        failed_states=['failed', 'skipped']
+        allowed_states=['success'],  # Only valid DagRunStates are allowed
+        failed_states=['failed']     # Remove 'skipped' as it's not a valid DagRunState
     )
 
     @task
