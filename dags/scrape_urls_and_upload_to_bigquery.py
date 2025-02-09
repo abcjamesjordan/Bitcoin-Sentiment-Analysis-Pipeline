@@ -2,7 +2,8 @@
 from airflow import DAG
 from airflow.decorators import dag, task
 from airflow.models import Variable
-from datetime import datetime
+from airflow.sensors.external_task import ExternalTaskSensor
+from datetime import datetime, timedelta
 
 # Local imports
 from utils.bigquery_ops import (
@@ -19,7 +20,7 @@ PROJECT_ID = Variable.get("GCP_PROJECT_ID", "news-api-421321")
 ARTICLES_DATASET = Variable.get("ARTICLES_DATASET", "articles")
 URL_LIMIT = Variable.get("URL_BATCH_SIZE", 2)
 DOMAIN_TO_SCRAPE = Variable.get("DOMAIN_TO_SCRAPE", "newsbtc.com")
-TIME_FILTER = Variable.get("TIME_FILTER", False)
+TIME_FILTER = Variable.get("TIME_FILTER", True)
 
 default_args = {
     'start_date': datetime(2025, 1, 1),
@@ -27,9 +28,22 @@ default_args = {
 
 @dag(
     default_args=default_args,
-    catchup=False
+    schedule="@daily",
+    catchup=False,
+    depends_on_past=False
 )
 def scrape_urls_and_upload_to_bigquery():
+    # Wait for newsapi DAG to complete
+    wait_for_newsapi = ExternalTaskSensor(
+        task_id='wait_for_newsapi',
+        external_dag_id='newsapi_get_data',
+        external_task_id=None,  # Wait for entire DAG
+        timeout=3600,  # 1 hour timeout
+        mode='reschedule',  # Don't block a worker while waiting
+        allowed_states=['success'],
+        failed_states=['failed', 'skipped']
+    )
+
     @task
     def get_strategies():
         return get_domain_strategies(PROJECT_ID, ARTICLES_DATASET)
@@ -63,6 +77,9 @@ def scrape_urls_and_upload_to_bigquery():
     urls = get_urls()
     results = process_url_batch(urls, domain_strategies)
 
+    # Update task dependencies
+    wait_for_newsapi >> urls  # Wait before getting URLs
+    
     # Process results in parallel where possible
     results >> [
         handle_failed_strategies(results),

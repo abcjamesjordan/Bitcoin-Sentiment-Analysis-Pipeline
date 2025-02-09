@@ -41,8 +41,8 @@ class NewsAPIConfig:
         bigquery.SchemaField("author", "STRING", mode="NULLABLE"),
         bigquery.SchemaField("description", "STRING", mode="NULLABLE"),
         bigquery.SchemaField("url", "STRING"),
-        bigquery.SchemaField("publishedAt", "TIMESTAMP"),
-        bigquery.SchemaField("uploadedAt", "TIMESTAMP")
+        bigquery.SchemaField("publishedAt", "STRING"),
+        bigquery.SchemaField("uploadedAt", "STRING")
     ]
 
 @task()
