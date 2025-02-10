@@ -147,10 +147,9 @@ def newsapi_get_data():
     
     df = prepare_dataframe(
         articles=articles,
-        data_interval_end="{{ data_interval_end }}"  # Airflow automatically converts this to datetime
+        data_interval_end="{{ data_interval_end }}"
     )
     
-    # Dedupe and load
     validated_df = confirm_transform(deduplicate_articles(df))
     load_data(validated_df)
 

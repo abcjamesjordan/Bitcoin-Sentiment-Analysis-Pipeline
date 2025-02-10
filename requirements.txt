@@ -29,3 +29,4 @@ urllib3==2.2.1
 trafilatura
 selenium
 webdriver-manager
+google-generativeai

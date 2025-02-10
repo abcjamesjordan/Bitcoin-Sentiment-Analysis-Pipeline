@@ -18,7 +18,7 @@ from utils.url_processor import process_urls
 # Replace hard-coded values
 PROJECT_ID = Variable.get("GCP_PROJECT_ID", "news-api-421321")
 ARTICLES_DATASET = Variable.get("ARTICLES_DATASET", "articles")
-URL_LIMIT = Variable.get("URL_BATCH_SIZE", 2)
+URL_LIMIT = Variable.get("URL_BATCH_SIZE", 101)
 DOMAIN_TO_SCRAPE = Variable.get("DOMAIN_TO_SCRAPE", "newsbtc.com")
 TIME_FILTER = Variable.get("TIME_FILTER", True)
 
@@ -28,7 +28,7 @@ default_args = {
 
 @dag(
     default_args=default_args,
-    schedule="@daily",
+    schedule="15 13 * * *",  # Run at 13:15 UTC
     catchup=False
 )
 def scrape_urls_and_upload_to_bigquery():
@@ -37,10 +37,11 @@ def scrape_urls_and_upload_to_bigquery():
         task_id='wait_for_newsapi',
         external_dag_id='newsapi_get_data',
         external_task_id=None,  # Wait for entire DAG
-        timeout=3600,  # 1 hour timeout
-        mode='reschedule',  # Don't block a worker while waiting
-        allowed_states=['success'],  # Only valid DagRunStates are allowed
-        failed_states=['failed']     # Remove 'skipped' as it's not a valid DagRunState
+        timeout=900,  # 15 minute timeout
+        poke_interval=60,  # Check every minute
+        mode='reschedule',
+        allowed_states=['success'],
+        failed_states=['failed']
     )
 
     @task
