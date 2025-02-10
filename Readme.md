@@ -8,7 +8,8 @@ A production-ready data engineering project that demonstrates practical experien
 - **Storage**: Google BigQuery
 - **Data Sources**: NewsAPI, Coinbase API
 - **Processing**: Python ecosystem (pandas, trafilatura, selenium)
-- **Future**: Google Gemini API integration, dbt implementation for transformations
+- **AI/ML**: Google Gemini API for sentiment analysis
+- **Future**: dbt implementation for transformations
 
 ## Core Features
 
@@ -30,6 +31,13 @@ A production-ready data engineering project that demonstrates practical experien
   - Configurable concurrency for resource management
   - Error handling with recovery mechanisms
   - Cost-effective cloud resource utilization
+  - Dependency management between DAGs
+  - Automated retries and failure handling
+- **Sentiment Analysis**: Automated analysis using Google's Gemini API
+  - Aspect-based sentiment analysis (price, adoption, regulation, technology)
+  - Confidence scoring for analysis reliability
+  - Automated processing pipeline with error handling
+  - Configurable batch processing
 
 ## Planned Enhancements
 
@@ -44,9 +52,11 @@ A production-ready data engineering project that demonstrates practical experien
    - Infrastructure as Code using Terraform
 
 3. **AI Integration**
-   - Sentiment analysis using Google's Gemini API
-   - Historical sentiment tracking
-   - Pattern recognition capabilities
+   - ✓ Sentiment analysis using Google's Gemini API
+   - ✓ Multi-aspect sentiment tracking (price, adoption, regulation, technology)
+   - ✓ Confidence scoring and validation
+   - Historical sentiment aggregation (planned)
+   - Pattern recognition capabilities (planned)
 
 4. **Analytics & Data Transformation**
    - dbt implementation for modular transformations
@@ -67,8 +77,14 @@ A production-ready data engineering project that demonstrates practical experien
 
 Organized into logical components:
 - Data collection DAGs
+  - News API article collection
+  - Bitcoin price tracking
 - Content processing modules
+  - Web scraping with fallback strategies
+  - Sentiment analysis pipeline
 - Storage operations
+  - BigQuery integration
+  - Schema management
 - Analytics framework (in development)
 
 Note: This project is actively maintained and worked on based on real-world requirements and feedback.
