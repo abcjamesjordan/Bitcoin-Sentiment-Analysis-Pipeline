@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
 from typing import Dict, Any, List
-
+from urllib.parse import urlparse
 SENTIMENT_ASPECTS = ['price', 'adoption', 'regulation', 'technology']
+
 
 def process_article(article: Dict[str, Any], analysis: Dict[str, Any]) -> Dict[str, Any]:
     aspects = analysis.get('sentiment_aspects', {})
@@ -29,6 +30,7 @@ def process_article(article: Dict[str, Any], analysis: Dict[str, Any]) -> Dict[s
             
     return base_result
 
+
 def get_failed_result(article_url: str) -> Dict[str, Any]:
     return {
         'article_url': article_url,
@@ -42,3 +44,11 @@ def get_failed_result(article_url: str) -> Dict[str, Any]:
         'model_version': 'failed',
         'raw_analysis': None
     }
+
+
+def extract_source_from_url(url: str) -> str:
+    """Extract domain from URL."""
+    try:
+        return urlparse(url).netloc.replace('www.', '')
+    except:
+        return 'unknown'

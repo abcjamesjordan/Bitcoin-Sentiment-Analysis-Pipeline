@@ -17,7 +17,7 @@ import pandas as pd
 
 # Local imports
 from utils.analyzers.gemini_sentiment import GeminiSentimentAnalyzer
-from utils.sentiment_processing import process_article, get_failed_result
+from utils.sentiment_processing import process_article, get_failed_result, extract_source_from_url
 
 # Set logging level
 logging.basicConfig(level=logging.INFO)
@@ -26,7 +26,8 @@ logger = logging.getLogger(__name__)
 # Configuration
 PROJECT_ID = Variable.get("GCP_PROJECT_ID", "news-api-421321")
 ARTICLES_DATASET = Variable.get("ARTICLES_DATASET", "articles")
-BATCH_SIZE = 100
+BATCH_SIZE = 1
+
 
 default_args = {
     'start_date': datetime(2025, 1, 1),
@@ -71,15 +72,21 @@ def sentiment_analysis():
         return df.to_dict('records')
 
     @task
-    def analyze_batch(articles: list) -> list:
-        """Process a batch of articles using GeminiSentimentAnalyzer."""
-        logger.info(f"Starting batch analysis of {len(articles)} articles")
+    def analyze_batch(articles: list):
+        """Process a batch of articles and collect metrics."""
         analyzer = GeminiSentimentAnalyzer(
             api_key=BaseHook.get_connection("gemini_api").get_password()
         )
-        
+        start_time = time.time()
         results = []
+        error_counts = {}
+        source_stats = {}
+        
         for i, article in enumerate(articles):
+            source = extract_source_from_url(article['article_url'])
+            source_stats[source] = source_stats.get(source, {'success': 0, 'total': 0})
+            source_stats[source]['total'] += 1
+            
             # Add delay every 25 articles to stay under 30 RPM
             if i > 0 and i % 25 == 0:
                 logger.info("Rate limit pause - waiting 60 seconds")
@@ -95,10 +102,13 @@ def sentiment_analysis():
                         article_id=article['article_url']
                     )
                     results.append(process_article(article, analysis))
+                    source_stats[source]['success'] += 1
                     logger.info(f"Successfully processed article {article['article_url']}")
                     break
                     
                 except genai.types.generation_types.BlockedPromptException as e:
+                    error_type = 'blocked_content'
+                    error_counts[error_type] = error_counts.get(error_type, 0) + 1
                     logger.error(f"Content blocked: {str(e)}")
                     results.append(get_failed_result(article['article_url']))
                     break
@@ -107,42 +117,64 @@ def sentiment_analysis():
                     if "RESOURCE_EXHAUSTED" in str(e) or "quota" in str(e).lower():
                         retries += 1
                         if retries <= max_retries:
-                            wait_time = 60 * (2 ** (retries - 1))  # Exponential backoff
+                            wait_time = 60 * (2 ** (retries - 1))
                             logger.warning(f"Rate limit hit, waiting {wait_time} seconds before retry {retries}")
                             time.sleep(wait_time)
                             continue
                     
+                    error_type = type(e).__name__
+                    error_counts[error_type] = error_counts.get(error_type, 0) + 1
                     logger.exception(f"Failed to process {article['article_url']} after {retries} retries:")
                     results.append(get_failed_result(article['article_url']))
                     break
         
-        return results
+        metrics = {
+            'date': datetime.now(timezone.utc).date(),
+            'total_articles': len(articles),
+            'successful_scrapes': len([r for r in results if r.get('model_version') != 'failed']),
+            'failed_scrapes': len([r for r in results if r.get('model_version') == 'failed']),
+            'avg_processing_time': (time.time() - start_time) / len(articles),
+            'errors': [{'error_type': k, 'count': v} for k,v in error_counts.items()],
+            'source_stats': [{
+                'source': source,
+                'success_rate': stats['success'] / stats['total']
+            } for source, stats in source_stats.items()]
+        }
 
-    @task
-    def upload_sentiment_results(results: list):
-        """Upload sentiment analysis results to BigQuery."""
-        if not results:
-            logging.info("No results to upload")
-            return
+        # Upload sentiment results
+        logger.info(f"Uploading sentiment results: {results}")
+        if results:
+            df = pd.DataFrame(results)
+            client = bigquery.Client()
+            table_id = f"{PROJECT_ID}.{ARTICLES_DATASET}.article_sentiments"
             
-        df = pd.DataFrame(results)
+            job_config = bigquery.LoadJobConfig(
+                write_disposition="WRITE_APPEND"
+            )
+            job = client.load_table_from_dataframe(df, table_id, job_config=job_config)
+            job.result()
+            
+            logging.info(f"Successfully uploaded {len(results)} sentiment analysis results")
+
+        # Upload metrics
+        logger.info(f"Uploading metrics: {metrics}")
         client = bigquery.Client()
-        table_id = f"{PROJECT_ID}.{ARTICLES_DATASET}.article_sentiments"
+        table_id = f"{PROJECT_ID}.{ARTICLES_DATASET}.processing_metrics"
         
+        df = pd.DataFrame([metrics])
         job_config = bigquery.LoadJobConfig(
             write_disposition="WRITE_APPEND"
         )
+        
         job = client.load_table_from_dataframe(df, table_id, job_config=job_config)
         job.result()
-        
-        logging.info(f"Successfully uploaded {len(results)} sentiment analysis results")
+        logger.info("Successfully uploaded processing metrics")
 
     # Define task dependencies
     articles = get_unanalyzed_articles()
-    results = analyze_batch(articles)
-    upload_sentiment_results(results)
+    batch_results = analyze_batch(articles)
     
     # Set task order
-    wait_for_scraping >> articles
+    wait_for_scraping >> articles >> batch_results
 
 sentiment_analysis() 

@@ -1,6 +1,6 @@
 from typing import Dict, List
 import google.generativeai as genai
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 import json
 
@@ -70,7 +70,7 @@ class GeminiSentimentAnalyzer:
             
             return {
                 "article_id": article_id,
-                "timestamp": datetime.now(datetime.UTC),
+                "timestamp": datetime.now(timezone.utc),
                 "overall_sentiment": analysis["overall_sentiment"],
                 "confidence_score": analysis["confidence_score"],
                 "sentiment_aspects": analysis["aspects"],

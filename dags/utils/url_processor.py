@@ -21,7 +21,7 @@ def process_urls(urls: list[str], domain_strategies: dict) -> dict:
     processed_data = []
     
     for url in urls:
-        domain = urlparse(url).netloc
+        domain = urlparse(url).netloc.replace('www.', '')
         using_domain_strategy = domain in domain_strategies
         strategies = domain_strategies.get(domain, DEFAULT_STRATEGIES)
         if isinstance(strategies, str):
