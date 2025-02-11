@@ -141,7 +141,7 @@ def load_data(df):
     
     logging.info(f"Successfully loaded {len(df)} rows to {NewsAPIConfig.DESTINATION}")
 
-@dag(schedule='1 13 * * *', start_date=datetime(2025, 1, 1), catchup=False)
+@dag(schedule='0 13 * * *', start_date=datetime(2025, 1, 1), catchup=False)
 def newsapi_get_data():
     articles = confirm_extract(extract_articles())
     

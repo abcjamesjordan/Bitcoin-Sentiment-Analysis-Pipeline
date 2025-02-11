@@ -1,13 +1,21 @@
+# Airflow imports
 from airflow import DAG
 from airflow.decorators import dag, task
+from airflow.hooks.base import BaseHook
 from airflow.models import Variable
 from airflow.sensors.external_task import ExternalTaskSensor
-from datetime import datetime, timedelta, timezone
-from google.cloud import bigquery
-import pandas as pd
-import logging
-from airflow.hooks.base import BaseHook
 
+# Python imports
+from datetime import datetime, timedelta, timezone
+import logging
+import time
+
+# Third party imports
+from google.cloud import bigquery
+import google.generativeai as genai
+import pandas as pd
+
+# Local imports
 from utils.analyzers.gemini_sentiment import GeminiSentimentAnalyzer
 from utils.sentiment_processing import process_article, get_failed_result
 
@@ -18,7 +26,7 @@ logger = logging.getLogger(__name__)
 # Configuration
 PROJECT_ID = Variable.get("GCP_PROJECT_ID", "news-api-421321")
 ARTICLES_DATASET = Variable.get("ARTICLES_DATASET", "articles")
-BATCH_SIZE = 1
+BATCH_SIZE = 100
 
 default_args = {
     'start_date': datetime(2025, 1, 1),
@@ -26,7 +34,7 @@ default_args = {
 
 @dag(
     default_args=default_args,
-    schedule="30 14 * * *",  # Run at 14:30 UTC (after scraping completes)
+    schedule="15 14 * * *",  # Run at 14:15 UTC (after scraping completes)
     catchup=False,
 )
 def sentiment_analysis():
@@ -35,9 +43,10 @@ def sentiment_analysis():
         task_id='wait_for_scraping',
         external_dag_id='scrape_urls_and_upload_to_bigquery',
         external_task_id=None,
+        execution_delta=timedelta(hours=1), # Run 1 hour after scraping DAG completes
         timeout=1800,  # 30 minute timeout
         poke_interval=60,  # Check every minute
-        mode='reschedule',
+        # mode='reschedule',
         allowed_states=['success'],
         failed_states=['failed']
     )
@@ -70,19 +79,42 @@ def sentiment_analysis():
         )
         
         results = []
-        for article in articles:
-            try:
-                logger.info(f"Processing article: {article['article_url']}")
-                analysis = analyzer.analyze_article(
-                    article_text=article['article_text'],
-                    article_id=article['article_url']
-                )
-                results.append(process_article(article, analysis))
-                logger.info(f"Successfully processed article {article['article_url']}")
+        for i, article in enumerate(articles):
+            # Add delay every 25 articles to stay under 30 RPM
+            if i > 0 and i % 25 == 0:
+                logger.info("Rate limit pause - waiting 60 seconds")
+                time.sleep(60)
                 
-            except Exception as e:
-                logger.exception(f"Full error details for {article['article_url']}:")
-                results.append(get_failed_result(article['article_url']))
+            retries = 0
+            max_retries = 2
+            while retries <= max_retries:
+                try:
+                    logger.info(f"Processing article: {article['article_url']}")
+                    analysis = analyzer.analyze_article(
+                        article_text=article['article_text'],
+                        article_id=article['article_url']
+                    )
+                    results.append(process_article(article, analysis))
+                    logger.info(f"Successfully processed article {article['article_url']}")
+                    break
+                    
+                except genai.types.generation_types.BlockedPromptException as e:
+                    logger.error(f"Content blocked: {str(e)}")
+                    results.append(get_failed_result(article['article_url']))
+                    break
+                    
+                except Exception as e:
+                    if "RESOURCE_EXHAUSTED" in str(e) or "quota" in str(e).lower():
+                        retries += 1
+                        if retries <= max_retries:
+                            wait_time = 60 * (2 ** (retries - 1))  # Exponential backoff
+                            logger.warning(f"Rate limit hit, waiting {wait_time} seconds before retry {retries}")
+                            time.sleep(wait_time)
+                            continue
+                    
+                    logger.exception(f"Failed to process {article['article_url']} after {retries} retries:")
+                    results.append(get_failed_result(article['article_url']))
+                    break
         
         return results
 

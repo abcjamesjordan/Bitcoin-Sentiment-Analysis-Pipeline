@@ -37,9 +37,10 @@ def scrape_urls_and_upload_to_bigquery():
         task_id='wait_for_newsapi',
         external_dag_id='newsapi_get_data',
         external_task_id=None,  # Wait for entire DAG
+        execution_delta=timedelta(minutes=15),
         timeout=900,  # 15 minute timeout
         poke_interval=60,  # Check every minute
-        mode='reschedule',
+        # mode='reschedule',
         allowed_states=['success'],
         failed_states=['failed']
     )

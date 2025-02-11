@@ -45,12 +45,8 @@ class GeminiSentimentAnalyzer:
         
         Article: {article_text}"""
         
-        logging.info("Generated prompt, calling Gemini API...")
-        logging.info(f"Prompt: {prompt}")
         try:
             response = self.model.generate_content(prompt)
-            logging.info(f"Response type: {type(response)}")
-            logging.info(f"Raw response text: {repr(response.text)}")
             
             cleaned_text = response.text.strip()
             # Remove markdown code block wrapper if present
@@ -60,13 +56,21 @@ class GeminiSentimentAnalyzer:
                 # Remove last line containing ```
                 cleaned_text = cleaned_text.rsplit('\n', 1)[0]
             
-            cleaned_text = cleaned_text.strip()  # Remove any extra whitespace
+            # Clean up JSON formatting issues
+            cleaned_text = (cleaned_text
+                .replace('\n', '')           # Remove newlines
+                .replace(' ', '')            # Remove spaces
+                .replace('\t', '')           # Remove tabs
+                .replace('}{', '},{')        # Fix missing commas
+                .replace('""', '"')          # Fix double quotes
+                .replace(',,', ',')          # Fix double commas
+            )
+            
             analysis = json.loads(cleaned_text)
-            logging.info(f"Parsed JSON: {analysis}")
             
             return {
                 "article_id": article_id,
-                "timestamp": datetime.utcnow(),
+                "timestamp": datetime.now(datetime.UTC),
                 "overall_sentiment": analysis["overall_sentiment"],
                 "confidence_score": analysis["confidence_score"],
                 "sentiment_aspects": analysis["aspects"],
@@ -75,7 +79,7 @@ class GeminiSentimentAnalyzer:
             }
         except json.JSONDecodeError as e:
             logging.error(f"JSON Parse Error: {str(e)}")
-            logging.error(f"Failed text: {repr(response.text)}")
+            logging.error(f"Failed text: {repr(cleaned_text)}")
             raise
         except Exception as e:
             logging.error(f"Unexpected error: {str(e)}")
