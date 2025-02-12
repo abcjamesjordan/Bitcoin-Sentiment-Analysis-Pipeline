@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 PROJECT_ID = Variable.get("GCP_PROJECT_ID", "news-api-421321")
 ARTICLES_DATASET = Variable.get("ARTICLES_DATASET", "articles")
 PRICING_DATASET = Variable.get("PRICING_DATASET", "pricing")
-BATCH_SIZE = 1
+BATCH_SIZE = 40
 
 
 default_args = {
