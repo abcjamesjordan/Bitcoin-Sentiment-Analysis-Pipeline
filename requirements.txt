@@ -30,3 +30,5 @@ trafilatura
 selenium
 webdriver-manager
 google-generativeai
+streamlit
+plotly
