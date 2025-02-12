@@ -32,3 +32,4 @@ webdriver-manager
 google-generativeai
 streamlit
 plotly
+pandas-gbq
