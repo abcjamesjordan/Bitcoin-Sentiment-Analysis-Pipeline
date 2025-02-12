@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 # Configuration
 PROJECT_ID = Variable.get("GCP_PROJECT_ID", "news-api-421321")
 ARTICLES_DATASET = Variable.get("ARTICLES_DATASET", "articles")
+PRICING_DATASET = Variable.get("PRICING_DATASET", "pricing")
 BATCH_SIZE = 1
 
 
@@ -141,11 +142,22 @@ def sentiment_analysis():
             } for source, stats in source_stats.items()]
         }
 
-        # Upload sentiment results
+        return_variable = {
+            'results': results,
+            'metrics': metrics
+        }
+
+        return return_variable
+
+    @task
+    def update_sentiment_results(results: list):
+        """Update the sentiment results in the article_sentiments table."""
+        results = results['results']
         logger.info(f"Uploading sentiment results: {results}")
-        if results:
-            df = pd.DataFrame(results)
-            client = bigquery.Client()
+        try:
+            if results:
+                df = pd.DataFrame(results)
+                client = bigquery.Client()
             table_id = f"{PROJECT_ID}.{ARTICLES_DATASET}.article_sentiments"
             
             job_config = bigquery.LoadJobConfig(
@@ -154,27 +166,66 @@ def sentiment_analysis():
             job = client.load_table_from_dataframe(df, table_id, job_config=job_config)
             job.result()
             
-            logging.info(f"Successfully uploaded {len(results)} sentiment analysis results")
+            logger.info(f"Successfully uploaded {len(results)} sentiment analysis results")
+        except Exception as e:
+            logger.exception(f"Failed to upload sentiment results: {e}")
 
+
+    @task
+    def update_sentiment_metrics(metrics: dict):
+        """Update the sentiment metrics in the processing_metrics table."""
         # Upload metrics
+        metrics = metrics['metrics']
         logger.info(f"Uploading metrics: {metrics}")
+        try:
+            client = bigquery.Client()
+            table_id = f"{PROJECT_ID}.{ARTICLES_DATASET}.processing_metrics"
+            
+            df = pd.DataFrame([metrics])
+            job_config = bigquery.LoadJobConfig(
+                write_disposition="WRITE_APPEND"
+            )
+            
+            job = client.load_table_from_dataframe(df, table_id, job_config=job_config)
+            job.result()
+            logger.info("Successfully uploaded processing metrics")
+        except Exception as e:
+            logger.exception(f"Failed to upload metrics: {e}")
+    
+
+    @task
+    def aggregate_hourly_metrics():
+        """Aggregate hourly metrics."""
         client = bigquery.Client()
-        table_id = f"{PROJECT_ID}.{ARTICLES_DATASET}.processing_metrics"
-        
-        df = pd.DataFrame([metrics])
-        job_config = bigquery.LoadJobConfig(
-            write_disposition="WRITE_APPEND"
+        query = """
+        CREATE OR REPLACE TABLE `{PROJECT_ID}.{ARTICLES_DATASET}.hourly_metrics` AS
+        WITH hourly_sentiment AS (
+            SELECT 
+                DATETIME_TRUNC(timestamp, HOUR) as hour,
+                AVG(overall_sentiment) as avg_sentiment,
+                AVG(CASE WHEN sentiment_aspects.price.relevant THEN sentiment_aspects.price.sentiment END) as price_sentiment,
+                COUNT(*) as article_count
+            FROM `{PROJECT_ID}.{ARTICLES_DATASET}.article_sentiments`
+            GROUP BY 1
         )
-        
-        job = client.load_table_from_dataframe(df, table_id, job_config=job_config)
-        job.result()
-        logger.info("Successfully uploaded processing metrics")
+        SELECT 
+            s.*,
+            CAST(p.price AS FLOAT64) as btc_price
+        FROM hourly_sentiment s
+        LEFT JOIN `{PROJECT_ID}.{PRICING_DATASET}.raw` p
+        ON s.hour = DATETIME_TRUNC(PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E*S', p.timestamp), hour)
+        ORDER BY hour
+        """
+        client.query(query)
 
     # Define task dependencies
     articles = get_unanalyzed_articles()
     batch_results = analyze_batch(articles)
+    sentiment_results = update_sentiment_results(batch_results)
+    sentiment_metrics = update_sentiment_metrics(batch_results)
+    aggregate_metrics = aggregate_hourly_metrics()
     
     # Set task order
-    wait_for_scraping >> articles >> batch_results
+    wait_for_scraping >> articles >> batch_results >> [sentiment_results, sentiment_metrics] >> aggregate_metrics
 
 sentiment_analysis() 
