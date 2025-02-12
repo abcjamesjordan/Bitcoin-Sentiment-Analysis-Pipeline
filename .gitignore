@@ -1,3 +1,7 @@
+# Ignore streamlit secrets
+.streamlit/secrets.toml
+.streamlit
+
 # Ignore the google credential json
 config/news-api-421321-3a5c418f3870.json
 

@@ -3,19 +3,19 @@
 # To run this file, you need to set the environment variable GOOGLE_APPLICATION_CREDENTIALS to the path of the service account key file.
 # To run this file run: streamlit run streamlit_idea.py
 
-import os
 import streamlit as st
 import pandas as pd
-from google.cloud import bigquery
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from google.oauth2 import service_account
 
 PROJECT_ID = "news-api-421321"
 ARTICLES_DATASET = "articles"
 
-# Set environment variables
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/srv/github/airflow/config/news-api-421321-3a5c418f3870.json"
-
+# Remove the os.environ line and add credentials setup
+credentials = service_account.Credentials.from_service_account_info(
+    st.secrets["gcp_service_account"]
+)
 
 def load_data() -> pd.DataFrame:
     """Load hourly metrics data from BigQuery for the last 7 days.
@@ -33,6 +33,7 @@ def load_data() -> pd.DataFrame:
         df = pd.read_gbq(
             query,
             project_id=PROJECT_ID,
+            credentials=credentials,
             progress_bar_type=None  # Cleaner output in Streamlit
         )
         return df
