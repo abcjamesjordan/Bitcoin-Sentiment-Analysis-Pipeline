@@ -197,7 +197,7 @@ def sentiment_analysis():
     def aggregate_hourly_metrics():
         """Aggregate hourly metrics."""
         client = bigquery.Client()
-        query = """
+        query = f"""
         CREATE OR REPLACE TABLE `{PROJECT_ID}.{ARTICLES_DATASET}.hourly_metrics` AS
         WITH hourly_sentiment AS (
             SELECT 
@@ -216,7 +216,13 @@ def sentiment_analysis():
         ON s.hour = DATETIME_TRUNC(PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E*S', p.timestamp), hour)
         ORDER BY hour
         """
-        client.query(query)
+        try:
+            job = client.query(query)
+            job.result()  # Wait for query to complete
+            logger.info("Successfully aggregated hourly metrics")
+        except Exception as e:
+            logger.exception("Failed to aggregate hourly metrics")
+            raise
 
     # Define task dependencies
     articles = get_unanalyzed_articles()
