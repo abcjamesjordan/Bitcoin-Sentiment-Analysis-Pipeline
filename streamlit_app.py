@@ -46,21 +46,108 @@ def main():
     
     df = load_data()
     
-    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    # Create subplots with 2 rows
+    fig = make_subplots(
+        rows=2, 
+        cols=1,
+        row_heights=[0.7, 0.3],
+        specs=[[{"secondary_y": True}],
+               [{"secondary_y": False}]],
+        vertical_spacing=0.1
+    )
     
-    # Price line
-    fig.add_trace(go.Scatter(x=df['hour'], y=df['btc_price'], name="BTC Price"), secondary_y=True)
+    # Price line on main chart - made more prominent
+    fig.add_trace(
+        go.Scatter(
+            x=df['hour'], 
+            y=df['btc_price'], 
+            name="BTC Price",
+            line=dict(width=3, color='#2962FF')  # Thicker, distinctive blue
+        ),
+        row=1, col=1,
+        secondary_y=True
+    )
     
-    # Sentiment bars
-    fig.add_trace(go.Bar(x=df['hour'], y=df['avg_sentiment'], name="Overall Sentiment"), secondary_y=False)
+    # Sentiment bars on main chart - made semi-transparent
+    fig.add_trace(
+        go.Bar(
+            x=df['hour'], 
+            y=df['avg_sentiment'], 
+            name="Sentiment Score",
+            marker_color='rgba(46, 204, 113, 0.3)',  # Semi-transparent green
+            marker_line_color='rgba(46, 204, 113, 0.8)',  # Darker border
+            marker_line_width=1
+        ),
+        row=1, col=1,
+        secondary_y=False
+    )
     
-    # Article count as bubble size
-    fig.add_trace(go.Scatter(x=df['hour'], y=df['price_sentiment'], 
-                           mode='markers',
-                           marker=dict(size=df['article_count']*5),
-                           name="Price Sentiment (bubble size = article count)"))
-
-    st.plotly_chart(fig)
+    # Enhanced heatmap in second row
+    fig.add_trace(
+        go.Heatmap(
+            x=df['hour'],
+            y=['Sentiment Volume'],  # Renamed for clarity
+            z=[df['avg_sentiment'] * df['article_count']],
+            colorscale=[
+                [0, 'rgb(255,65,54)'],      # Red for negative
+                [0.5, 'rgb(255,255,255)'],  # White for neutral
+                [1, 'rgb(46,204,113)']      # Green for positive
+            ],
+            showscale=True,
+            colorbar=dict(
+                title=dict(
+                    text="Sentiment × Volume",
+                    side='right'
+                ),
+                thickness=15,
+                len=0.7
+            ),
+            hoverongaps=False
+        ),
+        row=2, col=1
+    )
+    
+    # Update layout with improved styling
+    fig.update_layout(
+        height=800,
+        title_text="Bitcoin Price vs. News Sentiment Analysis",
+        title_x=0.5,  # Center title
+        showlegend=True,
+        hovermode='x unified',
+        plot_bgcolor='rgba(17,17,17,0.9)',  # Dark background
+        paper_bgcolor='rgb(17,17,17)',      # Dark background
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=0.01,
+            font=dict(color='white')
+        ),
+        font=dict(color='white')  # Make all text white
+    )
+    
+    # Update axes styling with light grid lines
+    fig.update_yaxes(
+        title_text="Sentiment Score", 
+        row=1, col=1, 
+        secondary_y=False, 
+        gridcolor='rgba(255,255,255,0.1)',
+        color='white'
+    )
+    fig.update_yaxes(
+        title_text="BTC Price ($)", 
+        row=1, col=1, 
+        secondary_y=True, 
+        gridcolor='rgba(255,255,255,0.1)',
+        color='white'
+    )
+    fig.update_xaxes(
+        gridcolor='rgba(255,255,255,0.1)', 
+        showgrid=True,
+        color='white'
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
 
 if __name__ == "__main__":
     main()
