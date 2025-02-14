@@ -9,10 +9,13 @@ class GeminiSentimentAnalyzer:
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel('gemini-2.0-flash-lite-preview-02-05')
         
-    def analyze_article(self, article_text: str, article_id: str) -> Dict:
-        logging.info(f"Analyzing article: {article_id[:50]}...")
-        
-        prompt = f"""You are a financial sentiment analyzer specializing in cryptocurrency news. Analyze this Bitcoin-related article and output ONLY a JSON object with these exact fields:
+    def analyze_article(self, article_text: str, article_id: str, prompt: str = None, tries: int = 0) -> Dict:
+        if tries >= 2:
+            raise Exception(f"Failed to get valid response after {tries} attempts")
+
+        logging.info(f"Analyzing article: {article_id[:50]}... (attempt {tries + 1}/2)")
+
+        prompt = prompt or f"""You are a financial sentiment analyzer specializing in cryptocurrency news. Analyze this Bitcoin-related article and output ONLY a JSON object with these exact fields:
 
         {{
             "overall_sentiment": <float -1.0 to 1.0>,
@@ -71,17 +74,29 @@ class GeminiSentimentAnalyzer:
             return {
                 "article_id": article_id,
                 "timestamp": datetime.now(timezone.utc),
-                "overall_sentiment": analysis["overall_sentiment"],
-                "confidence_score": analysis["confidence_score"],
-                "sentiment_aspects": analysis["aspects"],
+                "overall_sentiment": analysis.get("overall_sentiment") or analysis.get("sentiment"),
+                "confidence_score": analysis.get("confidence_score") or analysis.get("confidence"),
+                "sentiment_aspects": analysis.get("aspects", {}),
                 "raw_analysis": response.text,
                 "model_version": "gemini-2.0-flash-lite"
             }
-        except json.JSONDecodeError as e:
-            logging.error(f"JSON Parse Error: {str(e)}")
-            logging.error(f"Failed text: {repr(cleaned_text)}")
-            raise
-        except Exception as e:
-            logging.error(f"Unexpected error: {str(e)}")
-            logging.error(f"Error type: {type(e)}")
-            raise 
+        except (json.JSONDecodeError, Exception) as e:
+            logging.error(f"Error ({type(e).__name__}): {str(e)}")
+            if isinstance(e, json.JSONDecodeError):
+                logging.error(f"Failed text: {repr(cleaned_text)}")
+            
+            retry_prompt = f"""Your previous response was invalid. Return ONLY a JSON object. No explanation or markdown.
+{{
+    "overall_sentiment": <float -1.0 to 1.0>,
+    "confidence_score": <float 0.0 to 1.0>,
+    "aspects": {{
+        "price": {{"sentiment": <float>, "relevant": <boolean>}},
+        "adoption": {{"sentiment": <float>, "relevant": <boolean>}},
+        "regulation": {{"sentiment": <float>, "relevant": <boolean>}},
+        "technology": {{"sentiment": <float>, "relevant": <boolean>}}
+    }}
+}}
+
+Article: {article_text}"""
+
+            return self.analyze_article(article_text, article_id, retry_prompt, tries + 1)
