@@ -19,7 +19,7 @@ default_args = {
 
 @dag(
     default_args=default_args,
-    # schedule_interval='@hourly',
+    schedule_interval='@hourly',
     catchup=False,
     is_paused_upon_creation=True  # DAG starts paused
 )
@@ -84,6 +84,7 @@ def mastodon_scraper():
         import json
         from tempfile import NamedTemporaryFile
         from google.cloud import bigquery
+        from datetime import datetime
         
         if not results:
             logger.warning("No results to upload")
@@ -97,15 +98,34 @@ def mastodon_scraper():
         # Write results to a temporary file
         with NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
             for record in results:
+                # Convert datetime to ISO format string if it's a datetime object
+                if isinstance(record.get('created_at'), datetime):
+                    record['created_at'] = record['created_at'].isoformat()
                 json_str = json.dumps(record)
                 f.write(json_str + '\n')
             temp_file = f.name
 
-        # Configure the load job
+        # Define the schema explicitly to ensure correct types
+        schema = [
+            bigquery.SchemaField("id", "STRING"),
+            bigquery.SchemaField("author", "STRING"),
+            bigquery.SchemaField("author_display_name", "STRING"),
+            bigquery.SchemaField("content", "STRING"),
+            bigquery.SchemaField("created_at", "TIMESTAMP"),
+            bigquery.SchemaField("url", "STRING"),
+            bigquery.SchemaField("language", "STRING"),
+            bigquery.SchemaField("card_url", "STRING"),
+            bigquery.SchemaField("card_title", "STRING"),
+            bigquery.SchemaField("card_description", "STRING"),
+            bigquery.SchemaField("card_provider", "STRING"),
+            bigquery.SchemaField("tags", "STRING", mode="REPEATED")
+        ]
+        
+        # Configure the load job with explicit schema
         job_config = bigquery.LoadJobConfig(
             source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
             write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
-            autodetect=True  # Automatically detect schema
+            schema=schema  # Use explicit schema instead of autodetect
         )
 
         try:
@@ -124,7 +144,7 @@ def mastodon_scraper():
 
     # Define task dependencies
     results = search_mastodon(q="bitcoin")
-    # upload_to_bigquery(results)
+    upload_to_bigquery(results)
 
 # Instantiate DAG
 dag = mastodon_scraper()
