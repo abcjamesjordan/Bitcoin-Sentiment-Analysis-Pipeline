@@ -9,3 +9,4 @@ streamlit
 plotly
 pandas-gbq
 Mastodon.py
+beautifulsoup4
