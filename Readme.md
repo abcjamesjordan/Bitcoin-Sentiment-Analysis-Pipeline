@@ -12,6 +12,8 @@ A production-ready data engineering project that demonstrates practical experien
 - **Visualization**: Streamlit with Plotly
 - **Future**: dbt implementation for transformations
 
+![Airflow flow](https://github.com/user-attachments/assets/d458b33e-72ac-494d-90b0-dde5ad0c553f)
+
 ## Core Features
 
 ### Data Collection & Processing
