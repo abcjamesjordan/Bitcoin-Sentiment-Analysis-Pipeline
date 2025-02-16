@@ -38,13 +38,13 @@ def update_domain_strategies(project_id: str, dataset: str, new_strategies: dict
 def extract_urls(project_id: str, dataset: str, url_limit: int, time_filter: bool = False, context = None) -> list:
     from .url_processor import is_valid_url
 
-    if context:
-        conf = context['dag_run'].conf
-        source = conf.get('source', 'error')
-        if source == 'error':
-            raise ValueError("Invalid source: {source}")
-    else:
-        raise ValueError("Invalid context: {context}")
+    if not context or not context.get('dag_run') or not context['dag_run'].conf:
+        raise ValueError("Missing required DAG run configuration")
+    
+    conf = context['dag_run'].conf
+    source = conf.get('source')
+    if not source:
+        raise ValueError("Missing required 'source' parameter in DAG run configuration")
 
     client = bigquery.Client()
 
@@ -92,7 +92,7 @@ def extract_urls(project_id: str, dataset: str, url_limit: int, time_filter: boo
                     when card_url <> '' then
                         card_url
                     else
-                        url,
+                        url
                 end as url
             FROM `{SOURCE_LOCATION}`
             WHERE created_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)

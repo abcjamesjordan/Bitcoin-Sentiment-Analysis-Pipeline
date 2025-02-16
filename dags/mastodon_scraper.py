@@ -182,7 +182,6 @@ def mastodon_scraper():
 
     # Define task dependencies
     results = search_mastodon(q="bitcoin")
-    upload_to_bigquery(results)
-    trigger_child
+    upload_to_bigquery(results) >> trigger_child
 # Instantiate DAG
 dag = mastodon_scraper()

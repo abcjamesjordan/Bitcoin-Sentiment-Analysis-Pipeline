@@ -66,7 +66,7 @@ def scrape_urls_and_upload_to_bigquery():
         return get_domain_strategies(PROJECT_ID, ARTICLES_DATASET)
 
     @task
-    def get_urls(context: dict = None):
+    def get_urls(**context):
         return extract_urls(PROJECT_ID, ARTICLES_DATASET, URL_LIMIT, TIME_FILTER, context)
 
     @task
