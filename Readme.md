@@ -6,16 +6,19 @@ A production-ready data engineering project that demonstrates practical experien
 
 - **Orchestration**: Apache Airflow
 - **Storage**: Google BigQuery
-- **Data Sources**: NewsAPI, Coinbase API
+- **Data Sources**: NewsAPI, Coinbase API, Mastodon API
 - **Processing**: Python ecosystem (pandas, trafilatura, selenium)
 - **AI/ML**: Google Gemini API for sentiment analysis
+- **Visualization**: Streamlit with Plotly
 - **Future**: dbt implementation for transformations
 
 ## Core Features
 
 ### Data Collection & Processing
 - **Bitcoin Price Data**: Automated hourly price collection from Coinbase API
-- **News Articles**: Systematic collection of Bitcoin-related news using NewsAPI
+- **News Articles**: Multi-source collection strategy
+  - NewsAPI integration for mainstream coverage
+  - Mastodon social media scraping (hourly bitcoin keyword search)
   - Comprehensive article metadata and content extraction
   - Configurable multi-source collection
 - **Robust Web Scraping**: Implemented with practical fallback strategies
@@ -28,7 +31,6 @@ A production-ready data engineering project that demonstrates practical experien
   - Organized schema for news articles, price data, and metadata
   - Optimized for analytical queries
 - **Pipeline Architecture**: Built with real-world considerations
-  - Configurable concurrency for resource management
   - Error handling with recovery mechanisms
   - Cost-effective cloud resource utilization
   - Dependency management between DAGs
@@ -39,12 +41,19 @@ A production-ready data engineering project that demonstrates practical experien
   - Automated processing pipeline with error handling
   - Configurable batch processing
 
+### Analytics & Visualization
+- **Streamlit Dashboard**: Real-time sentiment analysis visualization
+  - Interactive price vs. sentiment correlation charts
+  - Sentiment volume heatmap visualization
+  - 7-day rolling analysis window
+  - Multi-aspect sentiment tracking
+
 ## Planned Enhancements
 
 1. **Pipeline Optimization**
-   - Streamlined article content extraction
+   - ✓ Streamlined article content extraction
    - Enhanced monitoring coverage
-   - Performance optimization
+   - ✓ Performance optimization
 
 2. **Operational Reliability**
    - Pipeline health metrics and alerts
@@ -53,7 +62,7 @@ A production-ready data engineering project that demonstrates practical experien
 
 3. **AI Integration**
    - ✓ Sentiment analysis using Google's Gemini API
-   - ✓ Multi-aspect sentiment tracking (price, adoption, regulation, technology)
+   - ✓ Multi-aspect sentiment tracking
    - ✓ Confidence scoring and validation
    - Historical sentiment aggregation (planned)
    - Pattern recognition capabilities (planned)
@@ -63,7 +72,6 @@ A production-ready data engineering project that demonstrates practical experien
    - Sentiment vs. price correlation models
    - Trend analysis and visualization
    - Historical pattern analysis
-   - Reusable analytics building blocks
 
 ## Technical Implementation
 
@@ -78,6 +86,7 @@ A production-ready data engineering project that demonstrates practical experien
 Organized into logical components:
 - Data collection DAGs
   - News API article collection
+  - Mastodon social scraping
   - Bitcoin price tracking
 - Content processing modules
   - Web scraping with fallback strategies
@@ -85,6 +94,9 @@ Organized into logical components:
 - Storage operations
   - BigQuery integration
   - Schema management
-- Analytics framework (in development)
+- Analytics framework
+  - Streamlit visualization
+  - Sentiment analysis dashboard
+  - Price correlation tracking
 
 Note: This project is actively maintained and worked on based on real-world requirements and feedback.
