@@ -3,7 +3,6 @@ from airflow import DAG
 from airflow.decorators import dag, task
 from airflow.hooks.base import BaseHook
 from airflow.models import Variable
-from airflow.sensors.external_task import ExternalTaskSensor
 
 # Python imports
 from datetime import datetime, timedelta, timezone
@@ -27,6 +26,7 @@ logger = logging.getLogger(__name__)
 PROJECT_ID = Variable.get("GCP_PROJECT_ID", "news-api-421321")
 ARTICLES_DATASET = Variable.get("ARTICLES_DATASET", "articles")
 PRICING_DATASET = Variable.get("PRICING_DATASET", "pricing")
+MASTODON_DATASET = Variable.get("MASTODON_DATASET", "mastodon")
 BATCH_SIZE = 40
 
 
@@ -36,29 +36,51 @@ default_args = {
 
 @dag(
     default_args=default_args,
-    schedule="15 14 * * *",  # Run at 14:15 UTC (after scraping completes)
     catchup=False,
+    description="""
+    Analyzes news article sentiment with Gemini AI, processes in batches, and updates BigQuery with scores and BTC price stats.
+    """,
+    tags=['sentiment', 'bitcoin', 'gemini-ai'],
+    max_active_runs=1
 )
 def sentiment_analysis():
-    # Wait for scraping DAG to complete
-    wait_for_scraping = ExternalTaskSensor(
-        task_id='wait_for_scraping',
-        external_dag_id='scrape_urls_and_upload_to_bigquery',
-        external_task_id=None,
-        execution_delta=timedelta(hours=1), # Run 1 hour after scraping DAG completes
-        timeout=1800,  # 30 minute timeout
-        poke_interval=60,  # Check every minute
-        # mode='reschedule',
-        allowed_states=['success'],
-        failed_states=['failed']
-    )
+    """
+    Bitcoin News Sentiment Analysis DAG
 
+    This DAG performs sentiment analysis on Bitcoin-related news articles using Gemini AI.
+
+    Flow:
+    1. Fetches unanalyzed articles from BigQuery (max {BATCH_SIZE} per run)
+    2. Analyzes article sentiment with rate limiting (25 articles/minute)
+    3. Updates BigQuery with sentiment scores and processing metrics
+    4. Aggregates hourly sentiment metrics with BTC price data
+
+    Features:
+    - Batch processing with automatic retries
+    - Rate limiting and quota management
+    - Error tracking by source and error type
+    - Sentiment aggregation with price correlation
+    - Source-level success rate tracking
+
+    Tables:
+    - articles.url_text: Source articles
+    - articles.article_sentiments: Sentiment analysis results
+    - articles.processing_metrics: Batch processing statistics
+    - articles.hourly_metrics: Aggregated sentiment/price data
+
+    Dependencies:
+    - Gemini AI API credentials
+    - BigQuery access
+    - Bitcoin price data in pricing.raw table
+    """
     @task
     def get_unanalyzed_articles() -> list:
         """Fetch unanalyzed articles from BigQuery."""
         client = bigquery.Client()
         query = f"""
-        SELECT a.url as article_url, a.text as article_text
+        SELECT 
+            a.url as article_url, 
+            a.text as article_text
         FROM `{PROJECT_ID}.{ARTICLES_DATASET}.url_text` a
         WHERE NOT EXISTS (
             SELECT 1 
@@ -71,6 +93,7 @@ def sentiment_analysis():
         """
         df = client.query(query).to_dataframe()
         return df.to_dict('records')
+
 
     @task
     def analyze_batch(articles: list):
@@ -149,6 +172,7 @@ def sentiment_analysis():
 
         return return_variable
 
+
     @task
     def update_sentiment_results(results: list):
         """Update the sentiment results in the article_sentiments table."""
@@ -191,7 +215,7 @@ def sentiment_analysis():
             logger.info("Successfully uploaded processing metrics")
         except Exception as e:
             logger.exception(f"Failed to upload metrics: {e}")
-    
+
 
     @task
     def aggregate_hourly_metrics():
@@ -232,6 +256,7 @@ def sentiment_analysis():
     aggregate_metrics = aggregate_hourly_metrics()
     
     # Set task order
-    wait_for_scraping >> articles >> batch_results >> [sentiment_results, sentiment_metrics] >> aggregate_metrics
+    # wait_for_scraping >> 
+    articles >> batch_results >> [sentiment_results, sentiment_metrics] >> aggregate_metrics
 
-sentiment_analysis() 
+sentiment_analysis()

@@ -1,9 +1,11 @@
-# Airflow imports
+# Standard library imports
+from datetime import datetime, timedelta
+
+# Airflow imports 
 from airflow import DAG
 from airflow.decorators import dag, task
 from airflow.models import Variable
-from airflow.sensors.external_task import ExternalTaskSensor
-from datetime import datetime, timedelta
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 
 # Local imports
 from utils.bigquery_ops import (
@@ -28,30 +30,44 @@ default_args = {
 
 @dag(
     default_args=default_args,
-    schedule="15 13 * * *",  # Run at 13:15 UTC
-    catchup=False
+    catchup=False,
+    description="""
+    Scrapes and processes article URLs using dynamic strategies, uploads to BigQuery, and triggers sentiment analysis.
+    """,
+    tags=['bitcoin', 'bigquery', 'web-scraping']
 )
 def scrape_urls_and_upload_to_bigquery():
-    # Wait for newsapi DAG to complete
-    wait_for_newsapi = ExternalTaskSensor(
-        task_id='wait_for_newsapi',
-        external_dag_id='newsapi_get_data',
-        external_task_id=None,  # Wait for entire DAG
-        execution_delta=timedelta(minutes=15),
-        timeout=900,  # 15 minute timeout
-        poke_interval=60,  # Check every minute
-        # mode='reschedule',
-        allowed_states=['success'],
-        failed_states=['failed']
-    )
+    """
+    DAG for scraping and processing cryptocurrency news articles.
 
+    Workflow:
+    1. Fetches domain-specific scraping strategies from BigQuery
+    2. Extracts URLs based on configured limits and time filters
+    3. Processes URLs using dynamic scraping strategies
+    4. Handles strategy updates and failures:
+        - Removes failed scraping strategies
+        - Updates with newly discovered strategies
+        - Uploads processed article data
+    5. Triggers downstream sentiment analysis DAG
+
+    Configuration (via Airflow Variables):
+    - GCP_PROJECT_ID: Google Cloud project ID
+    - ARTICLES_DATASET: BigQuery dataset name
+    - URL_BATCH_SIZE: Number of URLs to process per run
+    - DOMAIN_TO_SCRAPE: Target domain for scraping
+    - TIME_FILTER: Whether to filter by time
+
+    Dependencies:
+    - BigQuery for data storage
+    - Custom utils for URL processing and BigQuery operations
+    """
     @task
     def get_strategies():
         return get_domain_strategies(PROJECT_ID, ARTICLES_DATASET)
 
     @task
-    def get_urls():
-        return extract_urls(PROJECT_ID, ARTICLES_DATASET, URL_LIMIT, TIME_FILTER)
+    def get_urls(context: dict = None):
+        return extract_urls(PROJECT_ID, ARTICLES_DATASET, URL_LIMIT, TIME_FILTER, context)
 
     @task
     def process_url_batch(urls: list[str], domain_strategies: dict) -> dict:
@@ -73,19 +89,22 @@ def scrape_urls_and_upload_to_bigquery():
     def upload_results(results: dict):
         upload_processed_data(PROJECT_ID, ARTICLES_DATASET, results)
 
+    trigger_child = TriggerDagRunOperator(
+        task_id='trigger_child',
+        trigger_dag_id='sentiment_analysis',
+        wait_for_completion=False
+    )
+
     # DAG workflow
     domain_strategies = get_strategies()
     urls = get_urls()
     results = process_url_batch(urls, domain_strategies)
-
-    # Update task dependencies
-    wait_for_newsapi >> urls  # Wait before getting URLs
     
     # Process results in parallel where possible
     results >> [
         handle_failed_strategies(results),
         handle_new_strategies(results),
-        upload_results(results)
-    ]
+        upload_results(results),
+    ] >> trigger_child
 
 scrape_urls_and_upload_to_bigquery()

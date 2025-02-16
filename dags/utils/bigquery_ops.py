@@ -35,38 +35,81 @@ def update_domain_strategies(project_id: str, dataset: str, new_strategies: dict
     job = client.load_table_from_dataframe(df, table_id, job_config=job_config)
     job.result()
 
-def extract_urls(project_id: str, dataset: str, url_limit: int, time_filter: bool = False) -> list:
+def extract_urls(project_id: str, dataset: str, url_limit: int, time_filter: bool = False, context = None) -> list:
+    from .url_processor import is_valid_url
+
+    if context:
+        conf = context['dag_run'].conf
+        source = conf.get('source', 'error')
+        if source == 'error':
+            raise ValueError("Invalid source: {source}")
+    else:
+        raise ValueError("Invalid context: {context}")
+
     client = bigquery.Client()
-    SOURCE = f'{project_id}.{dataset}.raw'
-    CONDITIONAL_LOCATION = f'{project_id}.{dataset}.url_text'
-    BLACKLIST = f'{project_id}.{dataset}.blacklisted_urls'
 
-    time_filter_query = ""
-    if time_filter:
-        time_filter_query = """
-            AND PARSE_TIMESTAMP('%Y-%m-%d %H:%M:%S', uploadedAt) >= 
-                TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)
+    if source == 'newsapi':
+        SOURCE_LOCATION = f'{project_id}.{dataset}.raw'
+        CONDITIONAL_LOCATION = f'{project_id}.{dataset}.url_text'
+        BLACKLIST = f'{project_id}.{dataset}.blacklisted_urls'
+
+        time_filter_query = ""
+        if time_filter:
+            time_filter_query = """
+                AND PARSE_TIMESTAMP('%Y-%m-%d %H:%M:%S', uploadedAt) >= 
+                    TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)
+            """
+        
+        query = f"""
+        WITH blacklisted AS (
+            SELECT url FROM `{BLACKLIST}`
+        ),
+        processed AS (
+            SELECT url FROM `{CONDITIONAL_LOCATION}`
+        )
+        SELECT DISTINCT url
+        FROM `{SOURCE_LOCATION}`
+        WHERE url NOT IN (SELECT url FROM blacklisted)
+        AND url NOT IN (SELECT url FROM processed)
+        {time_filter_query}
+        LIMIT {url_limit}
         """
-    
-    query = f"""
-    WITH blacklisted AS (
-        SELECT url FROM `{BLACKLIST}`
-    ),
-    processed AS (
-        SELECT url FROM `{CONDITIONAL_LOCATION}`
-    )
-    SELECT DISTINCT url
-    FROM `{SOURCE}`
-    WHERE url NOT IN (SELECT url FROM blacklisted)
-    AND url NOT IN (SELECT url FROM processed)
-    {time_filter_query}
-    LIMIT {url_limit}
-    """
+    elif source == 'mastodon':
+        SOURCE_LOCATION = f'{project_id}.mastodon.raw_toots'
+        CONDITIONAL_LOCATION = f'{project_id}.{dataset}.url_text'
+        BLACKLIST = f'{project_id}.{dataset}.blacklisted_urls'
 
+        query = f"""
+        WITH blacklisted AS (
+            SELECT url FROM `{BLACKLIST}`
+        ),
+        processed AS (
+            SELECT url FROM `{CONDITIONAL_LOCATION}`
+        ),
+        toot_urls AS (
+            SELECT DISTINCT
+                case
+                    when card_url <> '' then
+                        card_url
+                    else
+                        url,
+                end as url
+            FROM `{SOURCE_LOCATION}`
+            WHERE created_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)
+            AND language = 'en'
+        )
+        SELECT DISTINCT url
+        FROM toot_urls
+        WHERE url NOT IN (SELECT url FROM blacklisted)
+        AND url NOT IN (SELECT url FROM processed)
+        LIMIT {url_limit}
+        """
+    else:
+        raise ValueError(f"Invalid source: {source}")
+    
     query_job = client.query(query)
     results = query_job.result()
 
-    from .url_processor import is_valid_url
     return [row.url for row in results if is_valid_url(row.url)]
 
 def upload_processed_data(project_id: str, dataset: str, data: dict):

@@ -1,10 +1,18 @@
-from airflow.decorators import dag, task
-from airflow.hooks.base import BaseHook
-from mastodon import Mastodon
+# Python standard library imports
 from datetime import datetime, timedelta
 import logging
-from airflow.models import Variable
+
+# Third-party imports
 from bs4 import BeautifulSoup
+from mastodon import Mastodon
+
+# Airflow imports
+from airflow.decorators import dag, task
+from airflow.hooks.base import BaseHook
+from airflow.models import Variable
+from airflow.operators.trigger_dagrun import TriggerDagRunOperator
+
+
 # Set logging level
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -21,9 +29,30 @@ default_args = {
     default_args=default_args,
     schedule_interval='@hourly',
     catchup=False,
-    is_paused_upon_creation=True  # DAG starts paused
+    description="""
+    Scrapes bitcoin-related Mastodon posts, extracts content and metadata to BigQuery, and triggers URL processing.
+    """,
+    tags=['bitcoin', 'mastodon', 'web-scraping', 'social-media']
 )
 def mastodon_scraper():
+    """
+    Scrapes bitcoin-related posts from Mastodon.social and loads them into BigQuery.
+    
+    The DAG performs the following steps:
+    1. Searches Mastodon for posts containing "bitcoin"
+    2. Extracts post content, metadata, and embedded URLs
+    3. Loads data into BigQuery table {PROJECT_ID}.{DESTINATION_TABLE}
+    4. Triggers a child DAG to process extracted URLs
+    
+    Requirements:
+        - Mastodon API credentials in Airflow connection 'mastodon_api'
+        - GCP credentials configured for BigQuery access
+        - Variables:
+            - GCP_PROJECT_ID
+            - DESTINATION_TABLE
+    
+    Schedule: Hourly
+    """
 
     @task
     def search_mastodon(q: str):
@@ -142,9 +171,18 @@ def mastodon_scraper():
             logger.error(f"Error uploading to BigQuery: {str(e)}")
             raise
 
+    trigger_child = TriggerDagRunOperator(
+        task_id='trigger_child',
+        trigger_dag_id='scrape_urls_and_upload_to_bigquery',
+        wait_for_completion=False,
+        conf={
+            'source': 'mastodon',
+        }
+    )
+
     # Define task dependencies
     results = search_mastodon(q="bitcoin")
     upload_to_bigquery(results)
-
+    trigger_child
 # Instantiate DAG
 dag = mastodon_scraper()
