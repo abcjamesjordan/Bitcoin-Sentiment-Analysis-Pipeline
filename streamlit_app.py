@@ -1,7 +1,7 @@
 # The streamlit app will generate a chart of the average sentiment vs the price of bitcoin over the last 7 days.
 
 # To run this file, you need to set the environment variable GOOGLE_APPLICATION_CREDENTIALS to the path of the service account key file.
-# To run this file run: streamlit run streamlit_idea.py
+# To run this file run: streamlit run streamlit_app.py
 
 import streamlit as st
 import pandas as pd
@@ -43,7 +43,16 @@ def load_data() -> pd.DataFrame:
 
 def main():
     st.title("Bitcoin Sentiment vs Price Analysis")
+
+    st.write("""
+    This dashboard analyzes Bitcoin-related news sentiment across multiple sources including mainstream media and Mastodon social posts. 
     
+    The top chart shows Bitcoin's price (blue line) overlaid with average sentiment scores (green bars) over the past 7 days. 
+    The bottom heatmap visualizes the combined impact of sentiment and article volume, where deeper green indicates stronger positive coverage and red indicates negative coverage. 
+
+    Data is collected hourly and processed using Google's Gemini API for multi-aspect sentiment analysis covering price predictions, adoption trends, regulatory news, and technological developments.
+    """)
+
     df = load_data()
     
     # Create subplots with 2 rows
@@ -110,7 +119,7 @@ def main():
     # Update layout with improved styling
     fig.update_layout(
         height=800,
-        title_text="Bitcoin Price vs. News Sentiment Analysis",
+        title_text="Bitcoin Price vs. News Sentiment",
         title_x=0.5,  # Center title
         showlegend=True,
         hovermode='x unified',
