@@ -40,7 +40,7 @@ default_args = {
     description="""
     Analyzes news article sentiment with Gemini AI, processes in batches, and updates BigQuery with scores and BTC price stats.
     """,
-    tags=['sentiment', 'bitcoin', 'gemini-ai'],
+    tags=['sentiment', 'bitcoin', 'gemini-ai', 'bigquery'],
     max_active_runs=1
 )
 def sentiment_analysis():

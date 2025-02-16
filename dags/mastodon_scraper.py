@@ -32,7 +32,7 @@ default_args = {
     description="""
     Scrapes bitcoin-related Mastodon posts, extracts content and metadata to BigQuery, and triggers URL processing.
     """,
-    tags=['bitcoin', 'mastodon', 'web-scraping', 'social-media']
+    tags=['bitcoin', 'mastodon', 'web-scraping', 'social-media', 'bigquery']
 )
 def mastodon_scraper():
     """

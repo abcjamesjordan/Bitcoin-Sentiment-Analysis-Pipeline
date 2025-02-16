@@ -8,11 +8,24 @@ from airflow.utils.dates import days_ago
         'start_date': days_ago(1),
         # 'retries': 1,
     },
-    schedule_interval='@hourly',
+    schedule_interval='55 * * * *',
     catchup=False,
+    description="""
+    Hourly DAG that fetches Bitcoin price from Coinbase and loads to BigQuery.
+    """,
+    tags=['bitcoin', 'pricing', 'bigquery']
 )
-
 def get_bitcoin_price():
+    """Hourly DAG that fetches Bitcoin price from Coinbase and loads to BigQuery.
+    
+    Tasks:
+        1. get_BTC_price: Fetches current BTC-USD spot price from Coinbase API
+        2. upload_to_bigquery: Loads price and timestamp to BigQuery table
+           news-api-421321.pricing.raw
+    
+    Dependencies:
+        get_BTC_price >> upload_to_bigquery
+    """
 
     @task
     def get_BTC_price():
