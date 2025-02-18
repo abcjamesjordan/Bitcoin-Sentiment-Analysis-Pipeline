@@ -3,6 +3,7 @@ from airflow import DAG
 from airflow.decorators import dag, task
 from airflow.hooks.base import BaseHook
 from airflow.models import Variable
+from airflow.exceptions import AirflowSkipException
 
 # Python imports
 from datetime import datetime, timedelta, timezone
@@ -92,7 +93,11 @@ def sentiment_analysis():
         LIMIT {BATCH_SIZE}
         """
         df = client.query(query).to_dataframe()
-        return df.to_dict('records')
+        articles = df.to_dict('records')
+        if len(articles) == 0:
+            logging.info("No unanalyzed articles found - skipping remaining tasks")
+            raise AirflowSkipException("No unanalyzed articles to process")
+        return articles
 
 
     @task
