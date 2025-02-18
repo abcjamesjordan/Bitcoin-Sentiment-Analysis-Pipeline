@@ -31,6 +31,7 @@ default_args = {
 @dag(
     default_args=default_args,
     catchup=False,
+    schedule=None,
     description="""
     Scrapes and processes article URLs using dynamic strategies, uploads to BigQuery, and triggers sentiment analysis.
     """,

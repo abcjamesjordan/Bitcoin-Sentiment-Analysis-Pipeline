@@ -18,7 +18,8 @@ def my_test_function(execution_date: datetime, logical_date: datetime):
 
 @dag(
         default_args=default_args,
-        catchup=False
+        catchup=False,
+        schedule=None
     )
 def james_test():
     run_this = my_test_function()

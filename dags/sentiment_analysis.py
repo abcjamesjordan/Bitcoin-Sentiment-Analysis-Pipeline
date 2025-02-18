@@ -38,6 +38,7 @@ default_args = {
 @dag(
     default_args=default_args,
     catchup=False,
+    schedule=None,
     description="""
     Analyzes news article sentiment with Gemini AI, processes in batches, and updates BigQuery with scores and BTC price stats.
     """,
