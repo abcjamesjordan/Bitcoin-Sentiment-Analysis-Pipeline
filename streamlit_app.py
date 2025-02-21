@@ -8,6 +8,9 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from google.oauth2 import service_account
+import numpy as np
+import pandas_gbq
+from pytrends.request import TrendReq
 
 PROJECT_ID = "news-api-421321"
 ARTICLES_DATASET = "articles"
@@ -30,16 +33,85 @@ def load_data() -> pd.DataFrame:
     """
     
     try:
-        df = pd.read_gbq(
+        df = pandas_gbq.read_gbq(
             query,
             project_id=PROJECT_ID,
-            credentials=credentials,
-            progress_bar_type=None  # Cleaner output in Streamlit
+            credentials=credentials
         )
         return df
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
         return pd.DataFrame()  # Return empty DataFrame on error
+
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def get_trends_data():
+    try:
+        pytrends = TrendReq(hl='en-US', retries=2, backoff_factor=0.5)
+        
+        # Build payload for the last 7 days
+        timeframe = 'now 7-d'
+        pytrends.build_payload(['bitcoin'], timeframe=timeframe)
+        
+        # Get interest over time data
+        df = pytrends.interest_over_time()
+        
+        # Clean up the data
+        if 'isPartial' in df.columns:
+            df = df.drop('isPartial', axis=1)
+        
+        # Ensure datetime index
+        df.index = pd.to_datetime(df.index)
+        
+        return df
+    except Exception as e:
+        st.warning(f"Couldn't fetch Google Trends data: {str(e)}")
+        # Return dummy data with same structure
+        return pd.DataFrame(
+            index=pd.date_range(end=pd.Timestamp.now(), periods=168, freq='h'),
+            data={'bitcoin': 50}  # Neutral value
+        )
+
+def calculate_fear_greed_index(df, trends_df):
+    """Calculate the Fear & Greed Index based on multiple indicators."""
+    
+    # Ensure both DataFrames have timezone-naive datetime indices
+    df_index = pd.to_datetime(df['hour']).dt.tz_localize(None)
+    trends_df.index = pd.to_datetime(trends_df.index).tz_localize(None)
+    
+    # Merge trends data with main DataFrame
+    merged_df = pd.DataFrame(index=df_index)
+    merged_df['btc_price'] = df['btc_price'].values
+    merged_df['avg_sentiment'] = df['avg_sentiment'].values
+    merged_df['trends'] = trends_df['bitcoin'].reindex(df_index, method='ffill')
+    
+    # Parameters
+    WINDOW = 6  # 6-hour rolling window
+    
+    # 1. Price Volatility (25%)
+    volatility = merged_df['btc_price'].rolling(WINDOW, min_periods=1).std()
+    volatility_norm = 100 - (volatility / volatility.max() * 100)
+    
+    # 2. Price Momentum (25%)
+    momentum = merged_df['btc_price'].pct_change(WINDOW) * 100
+    momentum_min, momentum_max = momentum.min(), momentum.max()
+    momentum_norm = ((momentum - momentum_min) / (momentum_max - momentum_min)) * 100
+    
+    # 3. Sentiment (35%)
+    sentiment_norm = (merged_df['avg_sentiment'] + 1) * 50  # Map -1 to 1 range to 0-100
+    
+    # 4. Trends (15%)
+    # Trends data should already be in 0-100 range
+    trends_norm = merged_df['trends']
+    
+    # Calculate weighted index
+    fear_greed_index = (
+        0.25 * volatility_norm.fillna(50) +  # Fill NaN with neutral value
+        0.25 * momentum_norm.fillna(50) +    # Fill NaN with neutral value
+        0.35 * sentiment_norm.fillna(50) +   # Fill NaN with neutral value
+        0.15 * trends_norm.fillna(50)        # Fill NaN with neutral value
+    )
+    
+    return fear_greed_index.clip(0, 100)  # Ensure output is between 0 and 100
 
 def main():
     st.title("Bitcoin Sentiment vs Price Analysis")
@@ -47,84 +119,53 @@ def main():
     st.write("""
     This dashboard analyzes Bitcoin-related news sentiment across multiple sources including mainstream media and Mastodon social posts. 
     
-    The top chart shows Bitcoin's price (blue line) overlaid with average sentiment scores (green bars) over the past 7 days. 
-    The bottom heatmap visualizes the combined impact of sentiment and article volume, where deeper green indicates stronger positive coverage and red indicates negative coverage. 
+    The chart shows Bitcoin's price (blue line) overlaid with average sentiment scores (green bars) over the past 7 days.
 
     Data is collected hourly and processed using Google's Gemini API for multi-aspect sentiment analysis covering price predictions, adoption trends, regulatory news, and technological developments.
     """)
 
     df = load_data()
     
-    # Create subplots with 2 rows
+    # Create single plot instead of subplots
     fig = make_subplots(
-        rows=2, 
-        cols=1,
-        row_heights=[0.7, 0.3],
-        specs=[[{"secondary_y": True}],
-               [{"secondary_y": False}]],
+        specs=[[{"secondary_y": True}]],
         vertical_spacing=0.1
     )
     
-    # Price line on main chart - made more prominent
+    # Add price line
     fig.add_trace(
         go.Scatter(
             x=df['hour'], 
             y=df['btc_price'], 
             name="BTC Price",
-            line=dict(width=3, color='#2962FF')  # Thicker, distinctive blue
+            line=dict(width=3, color='#2962FF')
         ),
-        row=1, col=1,
         secondary_y=True
     )
     
-    # Sentiment bars on main chart - made semi-transparent
+    # Sentiment bars
     fig.add_trace(
         go.Bar(
             x=df['hour'], 
             y=df['avg_sentiment'], 
             name="Sentiment Score",
-            marker_color='rgba(46, 204, 113, 0.3)',  # Semi-transparent green
-            marker_line_color='rgba(46, 204, 113, 0.8)',  # Darker border
+            marker_color='rgba(46, 204, 113, 0.3)',
+            marker_line_color='rgba(46, 204, 113, 0.8)',
             marker_line_width=1
         ),
-        row=1, col=1,
         secondary_y=False
     )
     
-    # Enhanced heatmap in second row
-    fig.add_trace(
-        go.Heatmap(
-            x=df['hour'],
-            y=['Sentiment Volume'],  # Renamed for clarity
-            z=[df['avg_sentiment'] * df['article_count']],
-            colorscale=[
-                [0, 'rgb(255,65,54)'],      # Red for negative
-                [0.5, 'rgb(255,255,255)'],  # White for neutral
-                [1, 'rgb(46,204,113)']      # Green for positive
-            ],
-            showscale=True,
-            colorbar=dict(
-                title=dict(
-                    text="Sentiment × Volume",
-                    side='right'
-                ),
-                thickness=15,
-                len=0.7
-            ),
-            hoverongaps=False
-        ),
-        row=2, col=1
-    )
-    
-    # Update layout with improved styling
+    # Update layout
     fig.update_layout(
-        height=800,
+        xaxis_rangeslider_visible=False,
+        height=600,  # Reduced height since we removed the heatmap
         title_text="Bitcoin Price vs. News Sentiment",
-        title_x=0.5,  # Center title
+        title_x=0.5,
         showlegend=True,
         hovermode='x unified',
-        plot_bgcolor='rgba(17,17,17,0.9)',  # Dark background
-        paper_bgcolor='rgb(17,17,17)',      # Dark background
+        plot_bgcolor='rgba(17,17,17,0.9)',
+        paper_bgcolor='rgb(17,17,17)',
         legend=dict(
             yanchor="top",
             y=0.99,
@@ -132,31 +173,259 @@ def main():
             x=0.01,
             font=dict(color='white')
         ),
-        font=dict(color='white')  # Make all text white
-    )
-    
-    # Update axes styling with light grid lines
-    fig.update_yaxes(
-        title_text="Sentiment Score", 
-        row=1, col=1, 
-        secondary_y=False, 
-        gridcolor='rgba(255,255,255,0.1)',
-        color='white'
-    )
-    fig.update_yaxes(
-        title_text="BTC Price ($)", 
-        row=1, col=1, 
-        secondary_y=True, 
-        gridcolor='rgba(255,255,255,0.1)',
-        color='white'
-    )
-    fig.update_xaxes(
-        gridcolor='rgba(255,255,255,0.1)', 
-        showgrid=True,
-        color='white'
+        font=dict(color='white')
     )
     
     st.plotly_chart(fig, use_container_width=True)
+
+    # Create scatter plot of Sentiment vs Price
+    scatter_fig = go.Figure()
+    
+    # Add scatter plot with color gradient based on date
+    scatter_fig.add_trace(
+        go.Scatter(
+            x=df['avg_sentiment'],
+            y=df['btc_price'],
+            mode='markers',
+            marker=dict(
+                size=8,
+                color=df['hour'].astype(np.int64) // 10**9,  # Convert datetime to unix timestamp
+                colorscale='Viridis',
+                showscale=True,
+                colorbar=dict(title='Date')
+            ),
+            text=df['hour'].dt.strftime('%Y-%m-%d %H:%M'),
+            name='Price vs Sentiment'
+        )
+    )
+    
+    # Add trendline with error handling
+    try:
+        # Clean data first
+        mask = ~(df['avg_sentiment'].isna() | df['btc_price'].isna())
+        if mask.any():  # Only create trendline if we have valid data
+            x = df.loc[mask, 'avg_sentiment']
+            y = df.loc[mask, 'btc_price']
+            z = np.polyfit(x, y, 1)
+            p = np.poly1d(z)
+            scatter_fig.add_trace(
+                go.Scatter(
+                    x=x,
+                    y=p(x),
+                    mode='lines',
+                    name='Trend',
+                    line=dict(color='red', dash='dash')
+                )
+            )
+    except Exception as e:
+        st.warning("Couldn't generate trend line due to insufficient data")
+    
+    # Update layout with dark theme
+    scatter_fig.update_layout(
+        title="Bitcoin Price vs Sentiment Correlation",
+        title_x=0.5,
+        xaxis_title="Sentiment Score",
+        yaxis_title="BTC Price ($)",
+        plot_bgcolor='rgba(17,17,17,0.9)',
+        paper_bgcolor='rgb(17,17,17)',
+        font=dict(color='white'),
+        height=600,
+        showlegend=True,
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=0.01,
+            font=dict(color='white')
+        )
+    )
+    
+    # Update axes styling
+    scatter_fig.update_xaxes(gridcolor='rgba(255,255,255,0.1)', showgrid=True, color='white')
+    scatter_fig.update_yaxes(gridcolor='rgba(255,255,255,0.1)', showgrid=True, color='white')
+    
+    st.plotly_chart(scatter_fig, use_container_width=True)
+
+    # Add this after your existing charts
+    trends_df = get_trends_data()
+
+    trends_df.to_csv('trends_df.csv', index=False)
+    
+    # Create Plotly figure for trends data with secondary y-axis
+    trends_fig = make_subplots(specs=[[{"secondary_y": True}]])
+    
+    # Add Google Trends data
+    trends_fig.add_trace(
+        go.Scatter(
+            x=trends_df.index,
+            y=trends_df['bitcoin'],
+            mode='lines',
+            name='Search Interest',
+            line=dict(color='#1E88E5')  # Blue for trends
+        ),
+        secondary_y=False
+    )
+    
+    # Add Bitcoin price data
+    trends_fig.add_trace(
+        go.Scatter(
+            x=df['hour'],
+            y=df['btc_price'],
+            mode='lines',
+            name='BTC Price',
+            line=dict(color='#FFC107')  # Gold for bitcoin
+        ),
+        secondary_y=True
+    )
+    
+    # Update layout with dual y-axes titles
+    trends_fig.update_layout(
+        title="Bitcoin Google Search Interest vs Price",
+        title_x=0.5,
+        plot_bgcolor='rgba(17,17,17,0.9)',
+        paper_bgcolor='rgb(17,17,17)',
+        font=dict(color='white'),
+        height=600,
+        showlegend=True,
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=0.01,
+            font=dict(color='white')
+        )
+    )
+    
+    # Update axes styling with separate labels
+    trends_fig.update_xaxes(gridcolor='rgba(255,255,255,0.1)', showgrid=True, color='white')
+    trends_fig.update_yaxes(
+        title_text="Search Interest",
+        gridcolor='rgba(255,255,255,0.1)',
+        showgrid=True,
+        color='white',
+        secondary_y=False
+    )
+    trends_fig.update_yaxes(
+        title_text="BTC Price ($)",
+        gridcolor='rgba(255,255,255,0.1)',
+        showgrid=True,
+        color='white',
+        secondary_y=True
+    )
+    
+    st.plotly_chart(trends_fig, use_container_width=True)
+
+    # Calculate and display Fear & Greed Index
+    fear_greed_index = calculate_fear_greed_index(df, trends_df)
+    
+    # Create Fear & Greed dual-axis visualization
+    fg_fig = make_subplots(specs=[[{"secondary_y": True}]])
+    
+    # Add Bitcoin price line
+    fg_fig.add_trace(
+        go.Scatter(
+            x=df['hour'],
+            y=df['btc_price'],
+            name="BTC Price",
+            line=dict(color='#2962FF', width=2),
+        ),
+        secondary_y=True
+    )
+    
+    # Add Fear & Greed Index line
+    fg_fig.add_trace(
+        go.Scatter(
+            x=df['hour'],
+            y=fear_greed_index,
+            name="Fear & Greed Index",
+            line=dict(color='#2ecc71', width=2),
+        ),
+        secondary_y=False
+    )
+    
+    # Add shaded regions for extreme fear and greed
+    fg_fig.add_traces([
+        # Extreme Fear region (0-25)
+        go.Scatter(
+            x=df['hour'],
+            y=[25] * len(df),
+            fill=None,
+            mode='lines',
+            line=dict(color='rgba(255,0,0,0)'),
+            showlegend=False
+        ),
+        go.Scatter(
+            x=df['hour'],
+            y=[0] * len(df),
+            fill='tonexty',
+            mode='lines',
+            line=dict(color='rgba(255,0,0,0)'),
+            fillcolor='rgba(255,0,0,0.1)',
+            name='Extreme Fear'
+        ),
+        # Extreme Greed region (75-100)
+        go.Scatter(
+            x=df['hour'],
+            y=[100] * len(df),
+            fill=None,
+            mode='lines',
+            line=dict(color='rgba(0,255,0,0)'),
+            showlegend=False
+        ),
+        go.Scatter(
+            x=df['hour'],
+            y=[75] * len(df),
+            fill='tonexty',
+            mode='lines',
+            line=dict(color='rgba(0,255,0,0)'),
+            fillcolor='rgba(0,255,0,0.1)',
+            name='Extreme Greed'
+        )
+    ], secondary_ys=[False, False, False, False])
+    
+    # Update layout
+    fg_fig.update_layout(
+        title="Bitcoin Price vs Fear & Greed Index",
+        title_x=0.5,
+        plot_bgcolor='rgba(17,17,17,0.9)',
+        paper_bgcolor='rgb(17,17,17)',
+        font=dict(color='white'),
+        height=600,
+        showlegend=True,
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=0.01,
+            font=dict(color='white')
+        )
+    )
+    
+    # Update axes
+    fg_fig.update_xaxes(
+        gridcolor='rgba(255,255,255,0.1)',
+        showgrid=True,
+        color='white'
+    )
+    fg_fig.update_yaxes(
+        title_text="Fear & Greed Index",
+        range=[0, 100],
+        gridcolor='rgba(255,255,255,0.1)',
+        showgrid=True,
+        color='white',
+        secondary_y=False,
+        ticktext=['Extreme Fear', 'Fear', 'Neutral', 'Greed', 'Extreme Greed'],
+        tickvals=[10, 30, 50, 70, 90]
+    )
+    fg_fig.update_yaxes(
+        title_text="BTC Price ($)",
+        gridcolor='rgba(255,255,255,0.1)',
+        showgrid=True,
+        color='white',
+        secondary_y=True
+    )
+    
+    st.plotly_chart(fg_fig, use_container_width=True)
 
 if __name__ == "__main__":
     main()

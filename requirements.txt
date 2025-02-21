@@ -10,3 +10,5 @@ plotly
 pandas-gbq
 Mastodon.py
 beautifulsoup4
+pytrends
+urllib3<2
