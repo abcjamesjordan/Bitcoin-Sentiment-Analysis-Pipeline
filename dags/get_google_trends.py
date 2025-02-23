@@ -29,7 +29,8 @@ default_args = {
     default_args=default_args,
     description='Collects Bitcoin search trends data and stores in BigQuery',
     schedule_interval='0 13 * * *',
-    catchup=False
+    catchup=False,
+    tags=['bitcoin', 'google_trends', 'data_ingestion']
 )
 def get_google_trends_dag():
     """
