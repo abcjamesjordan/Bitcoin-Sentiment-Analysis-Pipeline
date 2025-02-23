@@ -20,7 +20,8 @@ credentials = service_account.Credentials.from_service_account_info(
     st.secrets["gcp_service_account"]
 )
 
-def load_data() -> pd.DataFrame:
+@st.cache_data(ttl="3600")  # Cache for 1 hour
+def load_metrics_data() -> pd.DataFrame:
     """Load hourly metrics data from BigQuery for the last 7 days.
     
     Returns:
@@ -43,40 +44,36 @@ def load_data() -> pd.DataFrame:
         st.error(f"Error loading data: {str(e)}")
         return pd.DataFrame()  # Return empty DataFrame on error
 
-@st.cache_data(ttl=3600)  # Cache for 1 hour
+@st.cache_data(ttl="1d")  # Cache for 1 day
 def get_trends_data():
+    """Load trends data from BigQuery for the last 7 days.
+    
+    Returns:
+        pd.DataFrame: DataFrame containing trends data
+    """
+    query = f"""
+    SELECT * FROM `{PROJECT_ID}.{ARTICLES_DATASET}.trends_data`
+    ORDER BY datetime DESC
+    """
+    
     try:
-        pytrends = TrendReq(hl='en-US', retries=2, backoff_factor=0.5)
-        
-        # Build payload for the last 7 days
-        timeframe = 'now 7-d'
-        pytrends.build_payload(['bitcoin'], timeframe=timeframe)
-        
-        # Get interest over time data
-        df = pytrends.interest_over_time()
-        
-        # Clean up the data
-        if 'isPartial' in df.columns:
-            df = df.drop('isPartial', axis=1)
-        
-        # Ensure datetime index
-        df.index = pd.to_datetime(df.index)
-        
+        df = pandas_gbq.read_gbq(
+            query,
+            project_id=PROJECT_ID,
+            credentials=credentials
+        )
         return df
     except Exception as e:
-        st.warning(f"Couldn't fetch Google Trends data: {str(e)}")
-        # Return dummy data with same structure
-        return pd.DataFrame(
-            index=pd.date_range(end=pd.Timestamp.now(), periods=168, freq='h'),
-            data={'bitcoin': 50}  # Neutral value
-        )
+        st.error(f"Error loading data: {str(e)}")
+        return pd.DataFrame()  # Return empty DataFrame on error
 
+@st.cache_data(ttl="3600")  # Cache for 1 hour
 def calculate_fear_greed_index(df, trends_df):
     """Calculate the Fear & Greed Index based on multiple indicators."""
     
     # Ensure both DataFrames have timezone-naive datetime indices
     df_index = pd.to_datetime(df['hour']).dt.tz_localize(None)
-    trends_df.index = pd.to_datetime(trends_df.index).tz_localize(None)
+    trends_df.index = pd.to_datetime(trends_df['datetime']).dt.tz_localize(None)
     
     # Merge trends data with main DataFrame
     merged_df = pd.DataFrame(index=df_index)
@@ -124,7 +121,7 @@ def main():
     Data is collected hourly and processed using Google's Gemini API for multi-aspect sentiment analysis covering price predictions, adoption trends, regulatory news, and technological developments.
     """)
 
-    df = load_data()
+    df = load_metrics_data()
     
     # Create single plot instead of subplots
     fig = make_subplots(
@@ -177,6 +174,18 @@ def main():
     )
     
     st.plotly_chart(fig, use_container_width=True)
+
+    st.write("""
+    This scatter plot reveals the relationship between Bitcoin price and sentiment scores. Each point represents an hourly data point, 
+    with color indicating the time (darker = more recent). The red dashed line shows the overall trend - a positive slope indicates 
+    that higher sentiment generally corresponds with higher prices.
+
+    This visualization is crucial for understanding market psychology and potential price movements:
+    • Strong positive correlation suggests sentiment drives price action
+    • Divergences (when sentiment and price move in opposite directions) often precede major trend reversals
+    • Clusters show periods of market consensus while outliers highlight unusual events
+    • The time-based coloring helps identify if these patterns are strengthening or weakening recently
+    """)
 
     # Create scatter plot of Sentiment vs Price
     scatter_fig = go.Figure()
@@ -251,13 +260,22 @@ def main():
 
     trends_df.to_csv('trends_df.csv', index=False)
     
+    st.write("""
+    This chart compares Bitcoin's Google Search interest against its price. Search trends often act as a leading indicator of price movements:
+    
+    • Search spikes typically precede major price moves
+    • Low search interest during price increases may signal limited retail participation
+    • High search volume during price drops could indicate panic or capitulation
+    • The relationship helps gauge market cycle phases - early bull markets often see rising prices before search interest catches up
+    """)
+    
     # Create Plotly figure for trends data with secondary y-axis
     trends_fig = make_subplots(specs=[[{"secondary_y": True}]])
     
     # Add Google Trends data
     trends_fig.add_trace(
         go.Scatter(
-            x=trends_df.index,
+            x=trends_df['datetime'],
             y=trends_df['bitcoin'],
             mode='lines',
             name='Search Interest',
@@ -314,6 +332,21 @@ def main():
     )
     
     st.plotly_chart(trends_fig, use_container_width=True)
+
+    st.write("""
+    The Fear & Greed Index combines multiple indicators to gauge market sentiment:
+    
+    • Price Volatility (25%): Higher volatility typically indicates fear
+    • Price Momentum (25%): Strong upward momentum suggests greed
+    • News Sentiment (35%): Overall sentiment from news and social media
+    • Search Trends (15%): Google search volume as a proxy for retail interest
+    
+    Trading implications:
+    • Extreme fear (0-25) often presents buying opportunities
+    • Extreme greed (75-100) suggests potential market tops
+    • Divergences between price and sentiment can signal trend reversals
+    • The index works best as a contrarian indicator - be fearful when others are greedy
+    """)
 
     # Calculate and display Fear & Greed Index
     fear_greed_index = calculate_fear_greed_index(df, trends_df)
