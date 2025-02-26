@@ -252,8 +252,6 @@ def main():
 
     # Add this after your existing charts
     trends_df = get_trends_data()
-
-    trends_df.to_csv('trends_df.csv', index=False)
     
     st.write("""
     This chart compares Bitcoin's Google Search interest against its price. Search trends often act as a leading indicator of price movements:
