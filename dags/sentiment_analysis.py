@@ -76,6 +76,24 @@ def sentiment_analysis():
     - Bitcoin price data in pricing.raw table
     """
     @task
+    def remove_failed_sentiment_articles():
+        """Remove articles that failed sentiment analysis previously."""
+        try:
+            client = bigquery.Client()
+            query = f"""
+            DELETE FROM `{PROJECT_ID}.{ARTICLES_DATASET}.article_sentiments`
+            WHERE model_version = 'failed'
+            OR overall_sentiment IS NULL
+            """
+            client.query(query)
+            logger.info("Successfully removed failed sentiment articles")
+
+            return True
+        except Exception as e:
+            logger.exception("Failed to remove failed sentiment articles")
+            raise AirflowSkipException("Failed to remove failed sentiment articles")
+
+    @task
     def get_unanalyzed_articles() -> list:
         """Fetch unanalyzed articles from BigQuery."""
         client = bigquery.Client()
@@ -255,6 +273,7 @@ def sentiment_analysis():
             raise
 
     # Define task dependencies
+    cleanup = remove_failed_sentiment_articles()
     articles = get_unanalyzed_articles()
     batch_results = analyze_batch(articles)
     sentiment_results = update_sentiment_results(batch_results)
@@ -262,7 +281,6 @@ def sentiment_analysis():
     aggregate_metrics = aggregate_hourly_metrics()
     
     # Set task order
-    # wait_for_scraping >> 
-    articles >> batch_results >> [sentiment_results, sentiment_metrics] >> aggregate_metrics
+    cleanup >> articles >> batch_results >> [sentiment_results, sentiment_metrics] >> aggregate_metrics
 
 sentiment_analysis()
