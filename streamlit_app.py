@@ -161,16 +161,12 @@ def main():
         title_x=0.5,
         showlegend=True,
         hovermode='x unified',
-        plot_bgcolor='rgba(17,17,17,0.9)',
-        paper_bgcolor='rgb(17,17,17)',
         legend=dict(
             yanchor="top",
             y=0.99,
             xanchor="left",
-            x=0.01,
-            font=dict(color='white')
-        ),
-        font=dict(color='white')
+            x=0.01
+        )
     )
     
     st.plotly_chart(fig, use_container_width=True)
@@ -181,10 +177,13 @@ def main():
     that higher sentiment generally corresponds with higher prices.
 
     This visualization is crucial for understanding market psychology and potential price movements:
-    • Strong positive correlation suggests sentiment drives price action
-    • Divergences (when sentiment and price move in opposite directions) often precede major trend reversals
-    • Clusters show periods of market consensus while outliers highlight unusual events
-    • The time-based coloring helps identify if these patterns are strengthening or weakening recently
+    - Strong positive correlation suggests sentiment drives price action
+
+    - Divergences (when sentiment and price move in opposite directions) often precede major trend reversals
+
+    - Clusters show periods of market consensus while outliers highlight unusual events
+
+    - The time-based coloring helps identify if these patterns are strengthening or weakening recently
     """)
 
     # Create scatter plot of Sentiment vs Price
@@ -235,17 +234,13 @@ def main():
         title_x=0.5,
         xaxis_title="Sentiment Score",
         yaxis_title="BTC Price ($)",
-        plot_bgcolor='rgba(17,17,17,0.9)',
-        paper_bgcolor='rgb(17,17,17)',
-        font=dict(color='white'),
         height=600,
         showlegend=True,
         legend=dict(
             yanchor="top",
             y=0.99,
             xanchor="left",
-            x=0.01,
-            font=dict(color='white')
+            x=0.01
         )
     )
     
@@ -263,10 +258,13 @@ def main():
     st.write("""
     This chart compares Bitcoin's Google Search interest against its price. Search trends often act as a leading indicator of price movements:
     
-    • Search spikes typically precede major price moves
-    • Low search interest during price increases may signal limited retail participation
-    • High search volume during price drops could indicate panic or capitulation
-    • The relationship helps gauge market cycle phases - early bull markets often see rising prices before search interest catches up
+    - Search spikes could precede major price moves
+
+    - Low search interest during price increases may signal limited participation
+
+    - High search volume during price drops could indicate panic or capitulation
+
+    - The relationship helps gauge market cycle phases - early bull markets often see rising prices before search interest catches up
     """)
     
     # Create Plotly figure for trends data with secondary y-axis
@@ -300,34 +298,28 @@ def main():
     trends_fig.update_layout(
         title="Bitcoin Google Search Interest vs Price",
         title_x=0.5,
-        plot_bgcolor='rgba(17,17,17,0.9)',
-        paper_bgcolor='rgb(17,17,17)',
-        font=dict(color='white'),
         height=600,
         showlegend=True,
         legend=dict(
             yanchor="top",
             y=0.99,
             xanchor="left",
-            x=0.01,
-            font=dict(color='white')
+            x=0.01
         )
     )
     
     # Update axes styling with separate labels
-    trends_fig.update_xaxes(gridcolor='rgba(255,255,255,0.1)', showgrid=True, color='white')
+    trends_fig.update_xaxes(
+        showgrid=True
+    )
     trends_fig.update_yaxes(
         title_text="Search Interest",
-        gridcolor='rgba(255,255,255,0.1)',
         showgrid=True,
-        color='white',
         secondary_y=False
     )
     trends_fig.update_yaxes(
         title_text="BTC Price ($)",
-        gridcolor='rgba(255,255,255,0.1)',
         showgrid=True,
-        color='white',
         secondary_y=True
     )
     
@@ -336,16 +328,22 @@ def main():
     st.write("""
     The Fear & Greed Index combines multiple indicators to gauge market sentiment:
     
-    • Price Volatility (25%): Higher volatility typically indicates fear
-    • Price Momentum (25%): Strong upward momentum suggests greed
-    • News Sentiment (35%): Overall sentiment from news and social media
-    • Search Trends (15%): Google search volume as a proxy for retail interest
+    - Price Volatility (25%): Higher volatility typically indicates fear
+
+    - Price Momentum (25%): Strong upward momentum suggests greed
+
+    - News Sentiment (35%): Overall sentiment from news and social media
+
+    - Search Trends (15%): Google search volume as a proxy for retail interest
     
     Trading implications:
-    • Extreme fear (0-25) often presents buying opportunities
-    • Extreme greed (75-100) suggests potential market tops
-    • Divergences between price and sentiment can signal trend reversals
-    • The index works best as a contrarian indicator - be fearful when others are greedy
+    - Extreme fear (0-25) often presents buying opportunities
+
+    - Extreme greed (75-100) suggests potential market tops
+
+    - Divergences between price and sentiment can signal trend reversals
+
+    - The index works best as a contrarian indicator - be fearful when others are greedy
     """)
 
     # Calculate and display Fear & Greed Index
@@ -420,41 +418,31 @@ def main():
     fg_fig.update_layout(
         title="Bitcoin Price vs Fear & Greed Index",
         title_x=0.5,
-        plot_bgcolor='rgba(17,17,17,0.9)',
-        paper_bgcolor='rgb(17,17,17)',
-        font=dict(color='white'),
         height=600,
         showlegend=True,
         legend=dict(
             yanchor="top",
             y=0.99,
             xanchor="left",
-            x=0.01,
-            font=dict(color='white')
+            x=0.01
         )
     )
     
     # Update axes
     fg_fig.update_xaxes(
-        gridcolor='rgba(255,255,255,0.1)',
-        showgrid=True,
-        color='white'
+        showgrid=True
     )
     fg_fig.update_yaxes(
         title_text="Fear & Greed Index",
         range=[0, 100],
-        gridcolor='rgba(255,255,255,0.1)',
         showgrid=True,
-        color='white',
         secondary_y=False,
         ticktext=['Extreme Fear', 'Fear', 'Neutral', 'Greed', 'Extreme Greed'],
         tickvals=[10, 30, 50, 70, 90]
     )
     fg_fig.update_yaxes(
         title_text="BTC Price ($)",
-        gridcolor='rgba(255,255,255,0.1)',
         showgrid=True,
-        color='white',
         secondary_y=True
     )
     
