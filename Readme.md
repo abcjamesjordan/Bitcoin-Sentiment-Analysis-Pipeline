@@ -42,9 +42,10 @@ A production-ready data engineering project that demonstrates practical experien
   - Automated retries and failure handling
 
 ### Analytics & Visualization
+View it live on streamlit! https://bitcoin-sentiment-analysis-pipeline-r8iayx28fi7zcg4tapbtqw.streamlit.app/
 - **Streamlit Dashboard**: Real-time sentiment analysis visualization
   - Interactive price vs. sentiment correlation charts
-  - Sentiment volume heatmap visualization
+  - Fear vs greed indicator
   - 7-day rolling analysis window
   - Multi-aspect sentiment tracking
 
