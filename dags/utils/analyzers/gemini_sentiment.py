@@ -7,7 +7,7 @@ import json
 class GeminiSentimentAnalyzer:
     def __init__(self, api_key: str):
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-2.0-flash-lite-preview-02-05')
+        self.model = genai.GenerativeModel('gemini-2.0-flash')
         
     def analyze_article(self, article_text: str, article_id: str, prompt: str = None, tries: int = 0) -> Dict:
         if tries >= 2:
