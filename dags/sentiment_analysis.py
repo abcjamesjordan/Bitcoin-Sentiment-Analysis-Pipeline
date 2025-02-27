@@ -28,7 +28,7 @@ PROJECT_ID = Variable.get("GCP_PROJECT_ID", "news-api-421321")
 ARTICLES_DATASET = Variable.get("ARTICLES_DATASET", "articles")
 PRICING_DATASET = Variable.get("PRICING_DATASET", "pricing")
 MASTODON_DATASET = Variable.get("MASTODON_DATASET", "mastodon")
-BATCH_SIZE = 40
+BATCH_SIZE = 30
 
 
 default_args = {
@@ -135,8 +135,8 @@ def sentiment_analysis():
             source_stats[source] = source_stats.get(source, {'success': 0, 'total': 0})
             source_stats[source]['total'] += 1
             
-            # Add delay every 25 articles to stay under 30 RPM
-            if i > 0 and i % 25 == 0:
+            # Add delay every 15 articles (with up to 2 retries) to stay under 30 RPM
+            if i > 0 and i % 15 == 0:
                 logger.info("Rate limit pause - waiting 60 seconds")
                 time.sleep(60)
                 
