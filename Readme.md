@@ -1,5 +1,7 @@
 # Bitcoin News Sentiment Analysis Pipeline
+
 ![- visual selection(3)](https://github.com/user-attachments/assets/fd59f75b-dc7d-422f-add8-cde4e5fd81a1)
+
 A production-ready data engineering project that demonstrates practical experience with ETL pipeline development, cloud services integration, and real-time data processing. Built using industry-standard tools like Apache Airflow, Google BigQuery, and modern APIs, this system processes Bitcoin-related news and price data to deliver actionable insights.
 
 ## Technology Stack
@@ -16,50 +18,110 @@ A production-ready data engineering project that demonstrates practical experien
 
 ### Data Collection & Processing
 ![Airflow flow](https://github.com/user-attachments/assets/d458b33e-72ac-494d-90b0-dde5ad0c553f)
-- **Bitcoin Price Data**: Automated hourly price collection from Coinbase API
-- **News Articles**: Multi-source collection strategy
-  - NewsAPI integration for mainstream coverage
-  - Mastodon social media scraping (hourly bitcoin keyword search)
-  - Comprehensive article metadata and content extraction
-  - Configurable multi-source collection
-- **Robust Web Scraping**: Implemented with practical fallback strategies
-  - Multi-approach content extraction using requests, trafilatura, and Selenium
-  - Error handling and automatic retries
-  - Source-specific optimizations
-- **Sentiment Analysis**: Automated analysis using Google's Gemini API
-  - Aspect-based sentiment analysis (price, adoption, regulation, technology)
-  - Confidence scoring for analysis reliability
-  - Automated processing pipeline with error handling
-  - Configurable batch processing
+
+- **Multi-Source Data Pipeline**:
+  - NewsAPI integration for mainstream media
+  - Mastodon social scraping with keyword filtering
+  - Coinbase API for real-time Bitcoin prices
+  - Google Trends integration for search interest
+
+- **Intelligent Web Scraping**:
+  - Dynamic scraping strategy detection
+  - Domain-specific optimizations
+  - Automatic strategy updates
+  - Fallback mechanisms:
+    - Primary: Trafilatura for clean extraction
+    - Secondary: Custom regex patterns
+    - Fallback: Selenium for JavaScript content
+  - Rate limiting and retry logic
+  - Success rate tracking by domain
+
+- **Sentiment Analysis Engine**:
+  - Google Gemini 2.0 Flash integration
+  - Multi-aspect analysis:
+    - Price predictions
+    - Adoption trends
+    - Regulatory impact
+    - Technical developments
+  - Confidence scoring
+  - Automated batch processing
+  - Rate limit handling
+  - Error recovery with exponential backoff
+
+- **Data Quality & Processing**:
+  - Automated validation pipelines
+  - Duplicate detection
+  - Content relevance scoring
+  - Source reliability metrics
+  - Real-time aggregation
+  - Historical pattern analysis
 
 ### Infrastructure
-- **Google BigQuery Integration**: Structured data storage solution
-  - Organized schema for news articles, price data, and metadata
-  - Optimized for analytical queries and cost effective-storage
-- **Pipeline Architecture**: Built with real-world considerations
-  - Error handling with recovery mechanisms
-  - Cost-effective cloud resource utilization
-  - Automated retries and failure handling
+- **Pipeline Architecture**: Production-grade implementation
+  - Modular DAG structure with clear separation of concerns
+  - Automated batch processing with configurable limits
+  - Comprehensive error handling and recovery
+  - Rate limiting and quota management for APIs
+  - Source-level success rate tracking
+  - Automated retries with exponential backoff
+
+- **BigQuery Integration**: Enterprise-ready data storage
+  - Optimized table schemas for analytics
+  - Efficient batch processing and updates
+  - Real-time aggregation for metrics
+  - Tables:
+    - `articles.url_text`: Source articles and metadata
+    - `articles.article_sentiments`: Sentiment analysis results
+    - `articles.processing_metrics`: Batch processing statistics
+    - `articles.hourly_metrics`: Aggregated sentiment/price data
+    - `pricing.raw`: Bitcoin price timeseries
+    - `mastodon.raw`: Social media data
+
+- **Monitoring & Reliability**:
+  - Processing metrics and error tracking
+  - Source-specific success rate monitoring
+  - Automated failure handling and recovery
+  - Configurable batch sizes and rate limits
+  - Comprehensive logging and diagnostics
 
 ### Analytics & Visualization
 View it live on streamlit! https://bitcoin-sentiment-analysis-pipeline-r8iayx28fi7zcg4tapbtqw.streamlit.app/
-- **Streamlit Dashboard**: Real-time sentiment analysis visualization
-  - Interactive price vs. sentiment correlation charts
-  - Fear vs greed indicator
-  - 7-day rolling analysis window
-  - Multi-aspect sentiment tracking
+
+- **Interactive Dashboard**: Real-time data visualization
+  - Price vs. Sentiment correlation analysis
+  - Time-series sentiment tracking
+  - Scatter plot with trend analysis
+  - Google Trends integration
+  - Custom Fear & Greed Index:
+    - Price Volatility (25%)
+    - Price Momentum (25%)
+    - News Sentiment (35%)
+    - Search Trends (15%)
+
+- **Technical Analysis**:
+  - Rolling sentiment aggregation
+  - Price-sentiment divergence detection
+  - Market psychology indicators
+  - Trend strength visualization
+  - Extreme sentiment alerts
+
+- **Data Insights**:
+  - Aspect-based sentiment breakdown
+  - Source reliability metrics
+  - Market consensus tracking
+  - Pattern recognition
+  - Trading signal generation
 
 ## Planned Enhancements
 
 1. **Pipeline Optimization**
    - ✓ Streamlined article content extraction
-   - Enhanced monitoring coverage
+   - ✓ Enhanced monitoring coverage
    - ✓ Performance optimization
 
 2. **Operational Reliability**
-   - Pipeline health metrics and alerts
+   - ✓ Pipeline health metrics and alerts
    - Automated testing and deployment
-   - Infrastructure as Code using Terraform
 
 3. **AI Integration**
    - ✓ Sentiment analysis using Google's Gemini API
@@ -70,34 +132,9 @@ View it live on streamlit! https://bitcoin-sentiment-analysis-pipeline-r8iayx28f
 
 4. **Analytics & Data Transformation**
    - dbt implementation for modular transformations
-   - Sentiment vs. price correlation models
-   - Trend analysis and visualization
+   - ✓ Sentiment vs. price correlation models
+   - ✓ Trend analysis and visualization
    - Historical pattern analysis
 
-## Technical Implementation
-
-- **Data Quality**: Systematic validation and monitoring
-- **Code Structure**: Type-annotated, tested, and documented
-- **Security**: Standard credential and API key management
-- **Architecture**: Component-based design for maintainability
-- **Performance**: Designed for efficient resource utilization
-
-## Project Structure
-
-Organized into logical components:
-- Data collection DAGs
-  - News API article collection
-  - Mastodon social scraping
-  - Bitcoin price tracking
-- Content processing modules
-  - Web scraping with fallback strategies
-  - Sentiment analysis pipeline
-- Storage operations
-  - BigQuery integration
-  - Schema management
-- Analytics framework
-  - Streamlit visualization
-  - Sentiment analysis dashboard
-  - Price correlation tracking
 
 Note: This project is actively maintained and worked on based on real-world requirements and feedback.
