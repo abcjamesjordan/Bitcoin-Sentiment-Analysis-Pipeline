@@ -11,6 +11,7 @@ from google.oauth2 import service_account
 import numpy as np
 import pandas_gbq
 from pytrends.request import TrendReq
+import json
 
 PROJECT_ID = "news-api-421321"
 ARTICLES_DATASET = "articles"
@@ -110,15 +111,125 @@ def calculate_fear_greed_index(df, trends_df):
     
     return fear_greed_index.clip(0, 100)  # Ensure output is between 0 and 100
 
+@st.cache_data(ttl="3600")  # Cache for 1 hour
+def load_processing_metrics() -> pd.DataFrame:
+    """Load processing metrics data from BigQuery.
+    
+    Returns:
+        pd.DataFrame: DataFrame containing processing metrics data
+    """
+    query = f"""
+    WITH daily_metrics AS (
+        SELECT 
+            DATE(date) as date,
+            SUM(total_articles) as total_articles,
+            SUM(successful_scrapes) as successful_scrapes,
+            SUM(failed_scrapes) as failed_scrapes,
+            AVG(avg_processing_time) as avg_processing_time
+        FROM `{PROJECT_ID}.{ARTICLES_DATASET}.processing_metrics`
+        GROUP BY date
+    ),
+    error_metrics AS (
+        SELECT 
+            DATE(date) as date,
+            error.error_type,
+            SUM(error.count) as error_count
+        FROM `{PROJECT_ID}.{ARTICLES_DATASET}.processing_metrics`
+        LEFT JOIN UNNEST(errors) as error
+        WHERE error IS NOT NULL
+        GROUP BY date, error.error_type
+    ),
+    source_metrics AS (
+        SELECT 
+            DATE(date) as date,
+            source_stat
+        FROM `{PROJECT_ID}.{ARTICLES_DATASET}.processing_metrics`
+        LEFT JOIN UNNEST(source_stats) as source_stat
+        WHERE source_stat IS NOT NULL
+    ),
+    error_rollup AS (
+        SELECT 
+            date,
+            TO_JSON_STRING(
+                ARRAY_AGG(
+                    STRUCT(error_type, error_count as count)
+                    ORDER BY error_count DESC
+                )
+            ) as error_summary
+        FROM error_metrics
+        GROUP BY date
+    ),
+    source_rollup AS (
+        SELECT
+            date,
+            TO_JSON_STRING(
+                ARRAY_AGG(
+                    source_stat
+                )
+            ) AS source_stats_summary
+        FROM source_metrics
+        GROUP BY date
+    )
+    SELECT 
+        m.date,
+        m.total_articles,
+        m.successful_scrapes,
+        m.failed_scrapes,
+        m.avg_processing_time,
+        e.error_summary,
+        s.source_stats_summary
+    FROM daily_metrics m
+    LEFT JOIN error_rollup e ON m.date = e.date
+    LEFT JOIN source_rollup s ON m.date = s.date
+    GROUP BY 
+        m.date,
+        m.total_articles,
+        m.successful_scrapes,
+        m.failed_scrapes,
+        m.avg_processing_time,
+        e.error_summary,
+        s.source_stats_summary
+    ORDER BY m.date DESC
+    LIMIT 30
+    ;
+    """
+    
+    try:
+        df = pandas_gbq.read_gbq(
+            query,
+            project_id=PROJECT_ID,
+            credentials=credentials
+        )
+        return df
+    except Exception as e:
+        st.error(f"Error loading processing metrics: {str(e)}")
+        return pd.DataFrame()
+
 def main():
     st.title("Bitcoin Sentiment vs Price Analysis")
 
-    st.write("""
-    This dashboard analyzes Bitcoin-related news sentiment across multiple sources including mainstream media and Mastodon social posts. 
-    
-    The chart shows Bitcoin's price (blue line) overlaid with average sentiment scores (green bars) over the past 7 days.
+    st.write(
+        """
+        Welcome to the project dashboard! You likely came here from my [Github repo](https://github.com/abcjamesjordan/Bitcoin-Sentiment-Analysis-Pipeline), but if not, welcome! 
 
-    Data is collected hourly and processed using Google's Gemini API for multi-aspect sentiment analysis covering price predictions, adoption trends, regulatory news, and technological developments.
+        Here, we explore the relationship between market sentiment and Bitcoin's price movements. Dive in to discover how news sentiment, search trends, and fear & greed indicators can provide valuable insights into potential market trends. And keep an eye on the data pipeline to ensure the data is being processed correctly.
+
+        All of the code for this project can be found [here](https://github.com/abcjamesjordan/Bitcoin-Sentiment-Analysis-Pipeline).
+
+        If you have any questions, please reach out to me on [LinkedIn](https://www.linkedin.com/in/abcjamesjordan/).
+        """
+    )
+
+    # Add a header for the first section
+    st.subheader("Price vs Sentiment Overview")
+
+    st.write("""
+    Analysis of Bitcoin (BTC) price and news sentiment over the last week.
+    
+    BTC price (blue line) is overlaid with average news sentiment (green bars).
+
+    Sentiment scores range from 0 (negative) to 1 (positive).
+    Sentiment scores are derived from an automated AI powered analysis (Google Gemini AI), providing a performant and scalable solution.
     """)
 
     df = load_metrics_data()
@@ -171,12 +282,11 @@ def main():
     
     st.plotly_chart(fig, use_container_width=True)
 
+    st.subheader("Sentiment Correlation Analysis")
     st.write("""
-    This scatter plot reveals the relationship between Bitcoin price and sentiment scores. Each point represents an hourly data point, 
-    with color indicating the time (darker = more recent). The red dashed line shows the overall trend - a positive slope indicates 
-    that higher sentiment generally corresponds with higher prices.
+    Bitcoin price vs. sentiment correlation, with points colored by time (darker = recent). The red dashed line indicates the trend.
 
-    This visualization is crucial for understanding market psychology and potential price movements:
+    This visualization is insightful for understanding market psychology and potential price movements:
     - Strong positive correlation suggests sentiment drives price action
 
     - Divergences (when sentiment and price move in opposite directions) often precede major trend reversals
@@ -253,8 +363,9 @@ def main():
     # Add this after your existing charts
     trends_df = get_trends_data()
     
+    st.subheader("Search Interest Analysis")
     st.write("""
-    This chart compares Bitcoin's Google Search interest against its price. Search trends often act as a leading indicator of price movements:
+    Bitcoin's Google Search interest against its price. Search trends often act as a leading indicator of price movements:
     
     - Search spikes could precede major price moves
 
@@ -323,8 +434,9 @@ def main():
     
     st.plotly_chart(trends_fig, use_container_width=True)
 
+    st.subheader("Fear & Greed Index Analysis")
     st.write("""
-    The Fear & Greed Index combines multiple indicators to gauge market sentiment:
+    The Fear & Greed Index combines multiple indicators to gauge market sentiment in a simple and quantifiable way:
     
     - Price Volatility (25%): Higher volatility typically indicates fear
 
@@ -445,6 +557,174 @@ def main():
     )
     
     st.plotly_chart(fg_fig, use_container_width=True)
+
+    # Add new Processing Statistics section
+    st.header("Data Processing Pipeline Analytics")
+    st.write("""
+    Welcome to the data pipeline section! Here's what you'll find here:
+    
+    - Collection Success Stories: See how well we're gathering articles each day and how the success rate is trending
+    - Speed Check: Track how quickly we're processing articles and spot any performance gaps
+    - Problem Spotting: Keep an eye on any hiccups in our system and where they're happening
+    - News Source Report Card: Discover which news sources are our low performers
+    - Article Count Tracker: Watch our growing collection of processed articles day by day
+    
+    These insights help keep the sentiment analysis pipeline running smoothly, ensuring the most accurate market insights possible!
+    """)
+
+    # Load processing metrics data
+    metrics_df = load_processing_metrics()
+    
+    if not metrics_df.empty:
+        # 1. Daily Success vs. Failure Rates
+        success_fail_fig = go.Figure()
+        success_fail_fig.add_trace(
+            go.Bar(
+                x=metrics_df['date'],
+                y=metrics_df['successful_scrapes'],
+                name='Successful Scrapes',
+                marker_color='#2ecc71'
+            )
+        )
+        success_fail_fig.add_trace(
+            go.Bar(
+                x=metrics_df['date'],
+                y=metrics_df['failed_scrapes'],
+                name='Failed Scrapes',
+                marker_color='#e74c3c'
+            )
+        )
+        success_fail_fig.update_layout(
+            title="Daily Success vs. Failure Rates",
+            xaxis_title="Date",
+            yaxis_title="Number of Scrapes",
+            height=400,
+            barmode='stack'
+        )
+        st.plotly_chart(success_fail_fig, use_container_width=True)
+
+        # 2. Average Processing Time Trend
+        processing_time_fig = go.Figure()
+        processing_time_fig.add_trace(
+            go.Scatter(
+                x=metrics_df['date'],
+                y=metrics_df['avg_processing_time'],
+                name='Avg Processing Time',
+                line=dict(color='#3498db', width=2),
+                fill='tozeroy'
+            )
+        )
+        processing_time_fig.update_layout(
+            title="Average Processing Time Trend",
+            xaxis_title="Date",
+            yaxis_title="Processing Time (seconds)",
+            height=400
+        )
+        st.plotly_chart(processing_time_fig, use_container_width=True)
+
+        # 3. Error Type Distribution
+        # Parse error_summary JSON string into a list of dictionaries
+        error_data = []
+        for _, row in metrics_df.iterrows():
+            if row['error_summary']:
+                errors = json.loads(row['error_summary'])
+                for error in errors:
+                    error_data.append({
+                        'date': row['date'],
+                        'error_type': error['error_type'],
+                        'count': error['count']
+                    })
+        
+        if error_data:
+            error_df = pd.DataFrame(error_data)
+            error_summary = error_df.groupby('error_type')['count'].sum().reset_index()
+
+            error_fig = go.Figure()
+            error_fig.add_trace(
+                go.Bar(
+                    x=error_summary['error_type'],
+                    y=error_summary['count'],
+                    marker_color='#e74c3c'
+                )
+            )
+            error_fig.update_layout(
+                title="Error Type Distribution",
+                xaxis_title="Error Type",
+                yaxis_title="Number of Occurrences",
+                height=400
+            )
+            st.plotly_chart(error_fig, use_container_width=True)
+
+        # 4. Source Success Rate Analysis
+        source_data = []
+        for _, row in metrics_df.iterrows():
+            if row['source_stats_summary']:
+                try:
+                    source_stats = json.loads(row['source_stats_summary'])
+                    for stat in source_stats:
+                        source_data.append({
+                            'date': row['date'],
+                            'source': stat['source'],
+                            'success_rate': stat['success_rate']
+                        })
+                except json.JSONDecodeError as e:
+                    st.error(f"JSON decoding error: {e}")
+                    continue
+
+        if source_data:
+            source_df = pd.DataFrame(source_data)
+            # Calculate average success rate per source
+            source_summary = source_df.groupby('source')['success_rate'].mean().reset_index()
+            # Filter to show only sources with non-zero success rates
+            source_summary = source_summary[source_summary['success_rate'] > 0]
+            # Sort by success rate descending
+            source_summary = source_summary.sort_values('success_rate', ascending=True)
+            # Take top 20 sources
+            source_summary = source_summary.head(20)
+
+            # Define color scale based on success rate
+            colors = ['#e74c3c' if rate < 0.5 else '#f1c40f' if rate < 0.75 else '#2ecc71' for rate in source_summary['success_rate']]
+
+            source_fig = go.Figure()
+            source_fig.add_trace(
+                go.Bar(
+                    x=source_summary['source'],
+                    y=source_summary['success_rate'] * 100,  # Convert to percentage
+                    marker_color=colors
+                )
+            )
+            source_fig.update_layout(
+                title="Bottom 20 Sources by Average Success Rate",
+                xaxis_title="Source",
+                yaxis_title="Success Rate (%)",
+                height=500,
+                xaxis_tickangle=-45,
+                yaxis=dict(range=[0, 100])
+            )
+            st.plotly_chart(source_fig, use_container_width=True)
+        else:
+            st.warning("No source data available to display.")
+
+        # 5. Total Articles Processed Over Time
+        total_articles_fig = go.Figure()
+        total_articles_fig.add_trace(
+            go.Scatter(
+                x=metrics_df['date'],
+                y=metrics_df['total_articles'],
+                name='Total Articles',
+                line=dict(color='#9b59b6', width=2),
+                fill='tozeroy'
+            )
+        )
+        total_articles_fig.update_layout(
+            title="Total Articles Processed Over Time",
+            xaxis_title="Date",
+            yaxis_title="Number of Articles",
+            height=400
+        )
+        st.plotly_chart(total_articles_fig, use_container_width=True)
+    else:
+        st.warning("No processing metrics data available.")
 
 if __name__ == "__main__":
     main()
