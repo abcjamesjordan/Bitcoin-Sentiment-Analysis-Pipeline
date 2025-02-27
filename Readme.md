@@ -4,6 +4,8 @@
 
 A production-ready data engineering project that demonstrates practical experience with ETL pipeline development, cloud services integration, and real-time data processing. Built using industry-standard tools like Apache Airflow, Google BigQuery, and modern APIs, this system processes Bitcoin-related news and price data to deliver actionable insights.
 
+Data visualizations can be viewed via Steamlit.io: https://ai-sentiment-analysis-pipeline.streamlit.app/
+
 ## Technology Stack
 
 - **Orchestration**: Apache Airflow
@@ -85,7 +87,9 @@ A production-ready data engineering project that demonstrates practical experien
   - Comprehensive logging and diagnostics
 
 ### Analytics & Visualization
-View it live on streamlit! https://bitcoin-sentiment-analysis-pipeline-r8iayx28fi7zcg4tapbtqw.streamlit.app/
+Check it out on streamlit! 
+
+[https://bitcoin-sentiment-analysis-pipeline-r8iayx28fi7zcg4tapbtqw.streamlit.app/](https://ai-sentiment-analysis-pipeline.streamlit.app/)
 
 - **Interactive Dashboard**: Real-time data visualization
   - Price vs. Sentiment correlation analysis
